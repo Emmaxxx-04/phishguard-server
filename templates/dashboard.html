@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhishGuard Togo — Détection automatique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1220; --panel:#121B2E; --panel-2:#182642; --line:#233150;
+    --text:#E7ECF6; --muted:#7C8AA8;
+    --danger:#FF5470; --warn:#FFB454; --safe:#34D399;
+    --accent:#5B8CFF;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh;}
+  header{padding:28px 40px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;}
+  .brand{display:flex; align-items:center; gap:14px;}
+  .logo{width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,var(--accent),#8AB4FF); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; font-weight:700; color:#0B1220; font-size:18px;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:22px; margin:0; letter-spacing:-0.01em;}
+  .sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .status{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--safe); box-shadow:0 0 8px var(--safe); animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+  main{padding:32px 40px; display:grid; grid-template-columns:340px 1fr; gap:28px; max-width:1200px; margin:0 auto;}
+  @media(max-width:860px){ main{grid-template-columns:1fr;} }
+
+  .stats-row{max-width:1200px; margin:0 auto; padding:0 40px; display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+  @media(max-width:860px){ .stats-row{grid-template-columns:repeat(2,1fr);} }
+  .stat-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px;}
+  .stat-value{font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700;}
+  .stat-label{color:var(--muted); font-size:11.5px; font-family:'IBM Plex Mono',monospace; margin-top:4px; text-transform:uppercase; letter-spacing:0.04em;}
+
+  .campaign-row{max-width:1200px; margin:0 auto; padding:20px 40px 0;}
+  .campaign-card{background:linear-gradient(135deg, rgba(255,84,112,0.08), rgba(255,84,112,0.02)); border:1px solid rgba(255,84,112,0.35); border-radius:12px; padding:16px 20px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .campaign-domain{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--danger); font-weight:500;}
+  .campaign-meta{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); display:flex; gap:16px;}
+  .campaign-tag{background:rgba(255,84,112,0.15); color:var(--danger); font-size:10.5px; padding:3px 8px; border-radius:12px; margin-left:8px;}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px;}
+  .panel h2{font-family:'Space Grotesk',sans-serif; font-size:15px; margin:0 0 4px; letter-spacing:-0.01em;}
+  .panel .desc{color:var(--muted); font-size:12.5px; margin-bottom:18px; line-height:1.5;}
+
+  label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; margin-top:14px; font-family:'IBM Plex Mono',monospace;}
+  select, textarea, input{width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); padding:10px 12px; font-family:'Inter',sans-serif; font-size:13.5px;}
+  textarea{resize:vertical; min-height:110px; font-family:'IBM Plex Mono',monospace; font-size:13px;}
+  select:focus, textarea:focus, input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+
+  button{margin-top:18px; width:100%; background:var(--accent); color:#0B1220; border:none; border-radius:8px; padding:12px; font-weight:600; font-size:14px; cursor:pointer; transition:transform .1s ease, opacity .15s ease;}
+  button:hover{opacity:0.92;}
+  button:active{transform:scale(0.98);}
+
+  .feed-item{border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:12px; background:var(--panel-2);}
+  .feed-top{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;}
+  .badge{font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500; padding:4px 10px; border-radius:20px; letter-spacing:0.03em;}
+  .badge.PHISHING{background:rgba(255,84,112,0.15); color:var(--danger); border:1px solid rgba(255,84,112,0.4);}
+  .badge.SUSPECT{background:rgba(255,180,84,0.15); color:var(--warn); border:1px solid rgba(255,180,84,0.4);}
+  .badge.LEGITIME{background:rgba(52,211,153,0.15); color:var(--safe); border:1px solid rgba(52,211,153,0.4);}
+  .meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);}
+  .feed-text{font-size:13.5px; color:var(--text); line-height:1.5; margin-bottom:10px; white-space:pre-wrap;}
+  .meter{height:5px; border-radius:4px; background:var(--line); overflow:hidden; margin-bottom:10px;}
+  .meter-fill{height:100%; border-radius:4px;}
+  .reasons{font-size:12px; color:var(--muted); line-height:1.6;}
+  .reasons li{margin-bottom:2px;}
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:40px 0; font-family:'IBM Plex Mono',monospace;}
+
+  .feed-actions{display:flex; gap:8px; margin-top:10px;}
+  .action-btn{width:auto; margin-top:0; padding:6px 12px; font-size:11.5px; font-family:'IBM Plex Mono',monospace; background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:6px;}
+  .action-btn:hover{border-color:var(--accent); color:var(--text);}
+  .corrected-tag{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--accent); margin-left:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">PG</div>
+    <div>
+      <h1>PhishGuard Togo</h1>
+      <div class="sub">Détection automatique de phishing — email, SMS & Mobile Money</div>
+    </div>
+  </div>
+  <div class="status"><span class="dot"></span> MOTEUR ACTIF — surveillance en temps réel</div>
+</header>
+
+<div class="stats-row" id="statsRow">
+  <div class="stat-card"><div class="stat-value" id="statTotal">0</div><div class="stat-label">Messages analysés</div></div>
+  <div class="stat-card"><div class="stat-value" id="statThreatPct" style="color:var(--danger)">0%</div><div class="stat-label">Taux de menace</div></div>
+  <div class="stat-card"><div class="stat-value" id="statOffenders" style="color:var(--warn)">0</div><div class="stat-label">Expéditeurs récidivistes</div></div>
+  <div class="stat-card"><div class="stat-value" id="statCorrections" style="color:var(--accent)">0</div><div class="stat-label">Corrections apprises</div></div>
+</div>
+
+<div class="campaign-row" id="campaignRow" style="display:none;">
+  <div class="panel" style="padding:20px 24px;">
+    <h2 style="margin-bottom:4px;">🛰 Threat Intelligence — Campagnes actives</h2>
+    <div class="desc">Domaines malveillants vus chez plusieurs expéditeurs différents ou sous plusieurs variantes typosquattées — signe d'une attaque coordonnée, pas d'un incident isolé.</div>
+    <div id="campaignList"></div>
+  </div>
+</div>
+
+<main>
+  <div class="panel">
+    <h2>Simuler une réception</h2>
+    <div class="desc">Les emails sont analysés automatiquement dès réception (IMAP). Ce formulaire simule l'arrivée d'un SMS ou d'un autre canal — en production, il serait déclenché par une passerelle SMS (webhook).</div>
+
+    <label>Canal</label>
+    <select id="channel">
+      <option value="sms">SMS</option>
+      <option value="email">Email (manuel)</option>
+      <option value="autre">Autre / réseau social</option>
+    </select>
+
+    <label>Expéditeur</label>
+    <input id="sender" placeholder="ex: +228 90 00 00 00 ou TMoney">
+
+    <label>Contenu du message</label>
+    <textarea id="text" placeholder="Collez ici le contenu du SMS ou message à analyser..."></textarea>
+
+    <button onclick="analyze()">Analyser maintenant</button>
+  </div>
+
+  <div class="panel">
+    <h2>Flux en direct</h2>
+    <div class="desc">Chaque message analysé — automatiquement (email) ou manuellement (simulation) — apparaît ici en temps réel avec son score et les raisons de la détection.</div>
+    <div id="feed"><div class="empty">En attente du premier message analysé…</div></div>
+  </div>
+</main>
+
+<script>
+async function analyze(){
+  const text = document.getElementById('text').value;
+  const channel = document.getElementById('channel').value;
+  const sender = document.getElementById('sender').value || 'inconnu';
+  if(!text.trim()) return;
+  await fetch('/api/analyze', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text, channel, sender})
+  });
+  document.getElementById('text').value = '';
+  loadFeed();
+}
+
+function colorFor(label){
+  if(label === 'PHISHING') return 'var(--danger)';
+  if(label === 'SUSPECT') return 'var(--warn)';
+  return 'var(--safe)';
+}
+
+async function loadStats(){
+  const res = await fetch('/api/stats');
+  const s = await res.json();
+  document.getElementById('statTotal').innerText = s.total;
+  document.getElementById('statThreatPct').innerText = s.threat_pct + '%';
+  document.getElementById('statOffenders').innerText = s.repeat_offenders;
+  document.getElementById('statCorrections').innerText = s.corrections;
+}
+
+async function sendFeedback(id, label){
+  await fetch('/api/feedback', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, label})
+  });
+  loadFeed();
+  loadStats();
+}
+
+async function loadFeed(){
+  const res = await fetch('/api/feed');
+  const items = await res.json();
+  const feed = document.getElementById('feed');
+  if(items.length === 0){
+    feed.innerHTML = '<div class="empty">En attente du premier message analysé…</div>';
+    return;
+  }
+  feed.innerHTML = items.map(it => `
+    <div class="feed-item">
+      <div class="feed-top">
+        <span class="badge ${it.label}">${it.label} · ${(it.score*100).toFixed(0)}%</span>
+        <span class="meta">${it.channel.toUpperCase()} · ${it.sender || 'inconnu'} · ${it.timestamp}</span>
+      </div>
+      <div class="feed-text">${escapeHtml(it.text).slice(0,300)}</div>
+      <div class="meter"><div class="meter-fill" style="width:${(it.score*100).toFixed(0)}%; background:${colorFor(it.label)}"></div></div>
+      <ul class="reasons">${it.reasons.map(r => `<li>• ${escapeHtml(r)}</li>`).join('')}</ul>
+      <div class="feed-actions">
+        ${it.corrected
+          ? `<span class="corrected-tag">✓ corrigé manuellement en ${it.label}</span>`
+          : `<button class="action-btn" onclick="sendFeedback(${it.id}, 'PHISHING')">Marquer PHISHING</button>
+             <button class="action-btn" onclick="sendFeedback(${it.id}, 'LEGITIME')">Marquer LÉGITIME</button>`
+        }
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.innerText = s;
+  return d.innerHTML;
+}
+
+async function loadCampaigns(){
+  const res = await fetch('/api/campaigns');
+  const campaigns = await res.json();
+  const row = document.getElementById('campaignRow');
+  const list = document.getElementById('campaignList');
+  if(campaigns.length === 0){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = 'block';
+  list.innerHTML = campaigns.map(c => `
+    <div class="campaign-card">
+      <div>
+        <span class="campaign-domain">${escapeHtml(c.domain)}</span>
+        ${c.variant_cluster ? '<span class="campaign-tag">variantes typosquat</span>' : ''}
+      </div>
+      <div class="campaign-meta">
+        <span>${c.sender_count} expéditeur(s)</span>
+        <span>${c.occurrences} occurrence(s)</span>
+        <span>${c.first_seen} → ${c.last_seen}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+loadFeed();
+loadStats();
+loadCampaigns();
+setInterval(() => { loadFeed(); loadStats(); loadCampaigns(); }, 4000);
+</script>
+
+</body>
+</html>
