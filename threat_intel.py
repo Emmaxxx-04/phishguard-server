@@ -167,10 +167,21 @@ def check_urlscan(url: str):
         }
 
     if submit_res.status_code not in (200, 201):
+        detail_msg = f"URLScan a refuse la soumission (code {submit_res.status_code})."
+        try:
+            err_data = submit_res.json()
+            if err_data.get("message") == "DNS Error - Could not resolve domain":
+                detail_msg = ("Ce domaine ne repond a aucune adresse reelle (DNS introuvable) — "
+                              "site probablement fictif, deja desactive, ou jamais enregistre. "
+                              "Le moteur principal reste fiable meme dans ce cas.")
+            elif err_data.get("message"):
+                detail_msg = f"URLScan : {err_data['message']}"
+        except (ValueError, KeyError):
+            pass
         return {
             "available": False, "ready": False,
             "screenshot_url": None, "result_page_url": None,
-            "message": f"URLScan a refuse la soumission (code {submit_res.status_code}).",
+            "message": detail_msg,
         }
 
     try:
