@@ -112,16 +112,31 @@ def get_active_campaigns():
     vus chez plusieurs expediteurs / occurrences = campagne coordonnee."""
     with DB_LOCK:
         conn = get_db()
-        rows = conn.execute("""
-            SELECT domain, COUNT(DISTINCT sender) as sender_count, COUNT(*) as occurrences,
-                   MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
-            FROM domain_sightings
-            GROUP BY domain
-            ORDER BY occurrences DESC
+        raw_rows = conn.execute("""
+            SELECT domain, sender, timestamp FROM domain_sightings
         """).fetchall()
         conn.close()
 
-    all_domains = [dict(r) for r in rows]
+    # Agregation manuelle par domaine (garde la liste reelle des expediteurs,
+    # necessaire pour dessiner le graphe de campagne cote frontend).
+    by_domain = {}
+    for r in raw_rows:
+        d = by_domain.setdefault(r["domain"], {"senders": set(), "occurrences": 0, "timestamps": []})
+        d["senders"].add(r["sender"])
+        d["occurrences"] += 1
+        d["timestamps"].append(r["timestamp"])
+
+    all_domains = []
+    for domain, info in by_domain.items():
+        all_domains.append({
+            "domain": domain,
+            "senders": info["senders"],
+            "sender_count": len(info["senders"]),
+            "occurrences": info["occurrences"],
+            "first_seen": min(info["timestamps"]),
+            "last_seen": max(info["timestamps"]),
+        })
+    all_domains.sort(key=lambda d: d["occurrences"], reverse=True)
 
     from urlintel import levenshtein
 
@@ -145,7 +160,9 @@ def get_active_campaigns():
 
     campaigns = []
     for cluster in clusters:
-        total_senders = sum(c["sender_count"] for c in cluster)
+        all_senders = set()
+        for c in cluster:
+            all_senders |= c["senders"]
         total_occurrences = sum(c["occurrences"] for c in cluster)
         # Seuil de confirmation : il faut au moins 2 expediteurs DISTINCTS.
         # Volontairement plus strict qu'un simple comptage d'occurrences :
@@ -153,11 +170,13 @@ def get_active_campaigns():
         # pas suffire a faire passer un domaine pour une "campagne confirmee"
         # (protection basique contre un signalement isole/errone qui polluerait
         # le tableau de bord).
-        if total_senders < 2:
+        if len(all_senders) < 2:
             continue
         campaigns.append({
             "domain": " / ".join(c["domain"] for c in cluster),
-            "sender_count": total_senders,
+            "domains": [c["domain"] for c in cluster],
+            "senders": sorted(all_senders),
+            "sender_count": len(all_senders),
             "occurrences": total_occurrences,
             "first_seen": min(c["first_seen"] for c in cluster),
             "last_seen": max(c["last_seen"] for c in cluster),
@@ -196,6 +215,11 @@ def check_url_page():
 @app.route("/security-checkup")
 def security_checkup_page():
     return render_template("security_checkup.html")
+
+
+@app.route("/check-qr")
+def check_qr_page():
+    return render_template("check_qr.html")
 
 
 @app.route("/api/threat-intel", methods=["POST"])
