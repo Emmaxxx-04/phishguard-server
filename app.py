@@ -231,7 +231,7 @@ def outlook_addin_files(filename):
 
 @app.route("/api/feed")
 def api_feed():
-    limit = min(int(request.args.get("limit", 10)), 100)
+    limit = min(int(request.args.get("limit", 6)), 100)
     offset = int(request.args.get("offset", 0))
     channel_filter = request.args.get("channel", "").strip()
     date_filter = request.args.get("date", "").strip()  # format attendu: YYYY-MM-DD
