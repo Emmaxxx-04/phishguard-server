@@ -231,12 +231,35 @@ def outlook_addin_files(filename):
 
 @app.route("/api/feed")
 def api_feed():
+    limit = min(int(request.args.get("limit", 10)), 100)
+    offset = int(request.args.get("offset", 0))
+    channel_filter = request.args.get("channel", "").strip()
+    date_filter = request.args.get("date", "").strip()  # format attendu: YYYY-MM-DD
+
+    where_clauses = []
+    params = []
+    if channel_filter:
+        where_clauses.append("channel = ?")
+        params.append(channel_filter)
+    if date_filter:
+        where_clauses.append("timestamp LIKE ?")
+        params.append(f"{date_filter}%")
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
     with DB_LOCK:
         conn = get_db()
+        total = conn.execute(
+            f"SELECT COUNT(*) c FROM analyses {where_sql}", params
+        ).fetchone()["c"]
         rows = conn.execute(
-            "SELECT * FROM analyses ORDER BY id DESC LIMIT 50"
+            f"SELECT * FROM analyses {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params + [limit, offset]
+        ).fetchall()
+        channels = conn.execute(
+            "SELECT DISTINCT channel FROM analyses ORDER BY channel"
         ).fetchall()
         conn.close()
+
     feed = []
     for r in rows:
         feed.append({
@@ -251,7 +274,15 @@ def api_feed():
             "reasons": r["reasons"].split("|||") if r["reasons"] else [],
             "timestamp": r["timestamp"],
         })
-    return jsonify(feed)
+
+    return jsonify({
+        "items": feed,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + limit) < total,
+        "available_channels": [c["channel"] for c in channels],
+    })
 
 
 @app.route("/api/stats")
@@ -332,7 +363,7 @@ def api_analyze():
 
     result = analyzer.analyze(text, channel=channel)
     result["sender"] = sender
-    result["timestamp"] = datetime.now().strftime("%H:%M:%S")
+    result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     reputation = get_sender_reputation(sender)
     if reputation["repeat_offender"]:
@@ -447,7 +478,7 @@ def imap_poll_loop():
                 full_text = f"{subject}\n{body}".strip()
                 result = analyzer.analyze(full_text, channel="email")
                 result["sender"] = sender
-                result["timestamp"] = datetime.now().strftime("%H:%M:%S")
+                result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                 header_score, header_reasons = analyze_email_headers(msg)
                 attach_score, attach_reasons = analyze_attachments(msg)
