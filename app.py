@@ -140,7 +140,18 @@ def get_active_campaigns():
 
     from urlintel import levenshtein
 
-    # Union simple : regroupe les domaines dont la racine est a distance <= 2
+    # Union simple : regroupe les domaines dont la racine est a distance <= 2.
+    # Deux garde-fous importants :
+    # - on retire le prefixe "www." avant de comparer, sinon "www.bing.com" et
+    #   "ww1.click" sont vus comme des variantes proches (comparaison "www" vs "ww1")
+    # - on exige une base d'au moins 5 caracteres : sur des bases tres courtes,
+    #   une distance de 2 represente une trop grande partie du mot et cree des
+    #   faux rapprochements sans rapport (ex: "abc" vs "xyz" ne devrait pas clusteriser
+    #   juste parce qu'ils sont courts).
+    def domain_base(domain):
+        d = domain.replace("www.", "", 1) if domain.startswith("www.") else domain
+        return d.split(".")[0]
+
     clusters = []
     used = [False] * len(all_domains)
     for i, d in enumerate(all_domains):
@@ -148,12 +159,12 @@ def get_active_campaigns():
             continue
         cluster = [d]
         used[i] = True
-        base_i = d["domain"].split(".")[0]
+        base_i = domain_base(d["domain"])
         for j in range(i + 1, len(all_domains)):
             if used[j]:
                 continue
-            base_j = all_domains[j]["domain"].split(".")[0]
-            if levenshtein(base_i, base_j) <= 2:
+            base_j = domain_base(all_domains[j]["domain"])
+            if len(base_i) >= 5 and len(base_j) >= 5 and levenshtein(base_i, base_j) <= 2:
                 cluster.append(all_domains[j])
                 used[j] = True
         clusters.append(cluster)
