@@ -101,6 +101,7 @@
   </div>
   <div class="header-actions">
     <a href="/check-url" class="nav-btn">🔍 Vérifier un site</a>
+    <a href="/check-qr" class="nav-btn">📷 Vérifier un QR Code</a>
     <a href="/security-checkup" class="nav-btn">🛡 Security Check-up</a>
     <div class="status"><span class="dot"></span> MOTEUR ACTIF — surveillance en temps réel</div>
   </div>
@@ -281,6 +282,49 @@ function escapeHtml(s){
   return d.innerHTML;
 }
 
+function buildCampaignGraph(domains, senders){
+  const allNodes = [
+    ...domains.map(d => ({label: d, type: 'domain'})),
+    ...senders.map(s => ({label: s, type: 'sender'})),
+  ];
+  const maxShow = 9;
+  const shown = allNodes.slice(0, maxShow);
+  const extra = allNodes.length - shown.length;
+
+  const cx = 200, cy = 120, radius = 85;
+  const n = Math.max(shown.length, 1);
+  let svgLines = '';
+  let svgNodes = '';
+
+  shown.forEach((node, i) => {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
+    const color = node.type === 'domain' ? '#FF5470' : '#5B8CFF';
+    const label = node.label.length > 16 ? node.label.slice(0, 14) + '…' : node.label;
+
+    svgLines += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#233150" stroke-width="1.5"/>`;
+    svgNodes += `
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${color}" />
+      <text x="${x.toFixed(1)}" y="${(y + 20).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="#7C8AA8" font-family="'IBM Plex Mono', monospace">${escapeHtml(label)}</text>
+    `;
+  });
+
+  return `
+    <svg viewBox="0 0 400 250" style="width:100%; max-width:420px; height:auto; display:block; margin:12px auto 0;">
+      ${svgLines}
+      <circle cx="${cx}" cy="${cy}" r="17" fill="#182642" stroke="#FF5470" stroke-width="2"/>
+      <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="14">🎯</text>
+      ${svgNodes}
+      ${extra > 0 ? `<text x="${cx}" y="${cy + radius + 38}" text-anchor="middle" font-size="9" fill="#5B6B8C">+${extra} autre(s) non affiché(s)</text>` : ''}
+    </svg>
+    <div style="text-align:center; font-size:10px; color:#5B6B8C; margin-top:8px;">
+      <span style="color:#FF5470;">●</span> domaine&nbsp;&nbsp;
+      <span style="color:#5B8CFF;">●</span> expéditeur
+    </div>
+  `;
+}
+
 async function loadCampaigns(){
   const res = await fetch('/api/campaigns');
   const campaigns = await res.json();
@@ -292,16 +336,22 @@ async function loadCampaigns(){
   }
   row.style.display = 'block';
   list.innerHTML = campaigns.map(c => `
-    <div class="campaign-card">
-      <div>
-        <span class="campaign-domain">${escapeHtml(c.domain)}</span>
-        ${c.variant_cluster ? '<span class="campaign-tag">variantes typosquat</span>' : ''}
+    <div class="campaign-card" style="display:block;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <span class="campaign-domain">${escapeHtml(c.domain)}</span>
+          ${c.variant_cluster ? '<span class="campaign-tag">variantes typosquat</span>' : ''}
+        </div>
+        <div class="campaign-meta">
+          <span>${c.sender_count} expéditeur(s)</span>
+          <span>${c.occurrences} occurrence(s)</span>
+          <span>${c.first_seen} → ${c.last_seen}</span>
+        </div>
       </div>
-      <div class="campaign-meta">
-        <span>${c.sender_count} expéditeur(s)</span>
-        <span>${c.occurrences} occurrence(s)</span>
-        <span>${c.first_seen} → ${c.last_seen}</span>
-      </div>
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer; font-size:11.5px; color:var(--accent); user-select:none;">Voir le graphe de la campagne</summary>
+        ${buildCampaignGraph(c.domains || [], c.senders || [])}
+      </details>
     </div>
   `).join('');
 }
