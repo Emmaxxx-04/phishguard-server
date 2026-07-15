@@ -14,7 +14,7 @@
     --accent:#5B8CFF;
   }
   *{box-sizing:border-box;}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; overflow-x:hidden;}
   header{padding:28px 40px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;}
   .header-actions{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
   .nav-btn{
@@ -34,7 +34,7 @@
   .dot{width:8px; height:8px; border-radius:50%; background:var(--safe); box-shadow:0 0 8px var(--safe); animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 
-  main{padding:32px 40px; display:grid; grid-template-columns:340px 1fr; gap:28px; max-width:1200px; margin:0 auto;}
+  main{padding:32px 40px; display:grid; grid-template-columns:340px 1fr; gap:28px; max-width:1200px; margin:0 auto; overflow-x:hidden;}
   @media(max-width:860px){ main{grid-template-columns:1fr;} }
 
   .stats-row{max-width:1200px; margin:0 auto; padding:0 40px; display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
@@ -45,11 +45,11 @@
 
   .campaign-row{max-width:1200px; margin:0 auto; padding:20px 40px 0;}
   .campaign-card{background:linear-gradient(135deg, rgba(255,84,112,0.08), rgba(255,84,112,0.02)); border:1px solid rgba(255,84,112,0.35); border-radius:12px; padding:16px 20px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
-  .campaign-domain{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--danger); font-weight:500;}
-  .campaign-meta{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); display:flex; gap:16px;}
+  .campaign-domain{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--danger); font-weight:500; overflow-wrap:anywhere;}
+  .campaign-meta{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap;}
   .campaign-tag{background:rgba(255,84,112,0.15); color:var(--danger); font-size:10.5px; padding:3px 8px; border-radius:12px; margin-left:8px;}
 
-  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px;}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; min-width:0;}
   .panel h2{font-family:'Space Grotesk',sans-serif; font-size:15px; margin:0 0 4px; letter-spacing:-0.01em;}
   .panel .desc{color:var(--muted); font-size:12.5px; margin-bottom:18px; line-height:1.5;}
 
@@ -68,13 +68,20 @@
   .badge.PHISHING{background:rgba(255,84,112,0.15); color:var(--danger); border:1px solid rgba(255,84,112,0.4);}
   .badge.SUSPECT{background:rgba(255,180,84,0.15); color:var(--warn); border:1px solid rgba(255,180,84,0.4);}
   .badge.LEGITIME{background:rgba(52,211,153,0.15); color:var(--safe); border:1px solid rgba(52,211,153,0.4);}
-  .meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted);}
-  .feed-text{font-size:13.5px; color:var(--text); line-height:1.5; margin-bottom:10px; white-space:pre-wrap;}
+  .meta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); overflow-wrap:anywhere;}
+  .feed-text{font-size:13.5px; color:var(--text); line-height:1.5; margin-bottom:10px; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;}
   .meter{height:5px; border-radius:4px; background:var(--line); overflow:hidden; margin-bottom:10px;}
   .meter-fill{height:100%; border-radius:4px;}
   .reasons{font-size:12px; color:var(--muted); line-height:1.6;}
   .reasons li{margin-bottom:2px;}
   .empty{color:var(--muted); font-size:13px; text-align:center; padding:40px 0; font-family:'IBM Plex Mono',monospace;}
+
+  .feed-filters{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .feed-filters select, .feed-filters input{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); padding:8px 10px; font-family:'Inter',sans-serif; font-size:12.5px;}
+  .filter-clear{width:auto; margin-top:0; padding:8px 12px; font-size:12px; background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px;}
+  .filter-clear:hover{border-color:var(--accent); color:var(--text);}
+  .load-more{width:100%; margin-top:14px; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px; border-radius:8px; font-size:12.5px; cursor:pointer;}
+  .load-more:hover{border-color:var(--accent);}
 
   .feed-actions{display:flex; gap:8px; margin-top:10px;}
   .action-btn{width:auto; margin-top:0; padding:6px 12px; font-size:11.5px; font-family:'IBM Plex Mono',monospace; background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:6px;}
@@ -137,8 +144,18 @@
 
   <div class="panel">
     <h2>Flux en direct</h2>
-    <div class="desc">Chaque message analysé — automatiquement (email) ou manuellement (simulation) — apparaît ici en temps réel avec son score et les raisons de la détection.</div>
+    <div class="desc">Chaque message analysé — automatiquement (email) ou manuellement (simulation) — apparaît ici avec son score et les raisons de la détection.</div>
+
+    <div class="feed-filters">
+      <select id="filterChannel" onchange="resetAndReload()">
+        <option value="">Tous les canaux</option>
+      </select>
+      <input type="date" id="filterDate" onchange="resetAndReload()">
+      <button class="filter-clear" onclick="clearFilters()">Réinitialiser</button>
+    </div>
+
     <div id="feed"><div class="empty">En attente du premier message analysé…</div></div>
+    <button class="load-more" id="loadMoreBtn" onclick="loadMore()" style="display:none;">Voir plus</button>
   </div>
 </main>
 
@@ -172,6 +189,32 @@ async function loadStats(){
   document.getElementById('statCorrections').innerText = s.corrections;
 }
 
+let loadedCount = 10;
+const PAGE_SIZE = 10;
+
+function currentFilters(){
+  return {
+    channel: document.getElementById('filterChannel').value,
+    date: document.getElementById('filterDate').value,
+  };
+}
+
+function resetAndReload(){
+  loadedCount = PAGE_SIZE;
+  loadFeed();
+}
+
+function clearFilters(){
+  document.getElementById('filterChannel').value = '';
+  document.getElementById('filterDate').value = '';
+  resetAndReload();
+}
+
+function loadMore(){
+  loadedCount += PAGE_SIZE;
+  loadFeed();
+}
+
 async function sendFeedback(id, label){
   await fetch('/api/feedback', {
     method:'POST',
@@ -183,14 +226,34 @@ async function sendFeedback(id, label){
 }
 
 async function loadFeed(){
-  const res = await fetch('/api/feed');
-  const items = await res.json();
+  const {channel, date} = currentFilters();
+  const params = new URLSearchParams({limit: loadedCount, offset: 0});
+  if(channel) params.set('channel', channel);
+  if(date) params.set('date', date);
+
+  const res = await fetch(`/api/feed?${params.toString()}`);
+  const data = await res.json();
   const feed = document.getElementById('feed');
-  if(items.length === 0){
-    feed.innerHTML = '<div class="empty">En attente du premier message analysé…</div>';
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+
+  const channelSelect = document.getElementById('filterChannel');
+  if(channelSelect.dataset.filled !== 'true' && data.available_channels && data.available_channels.length){
+    data.available_channels.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      channelSelect.appendChild(opt);
+    });
+    channelSelect.dataset.filled = 'true';
+  }
+
+  if(data.items.length === 0){
+    feed.innerHTML = '<div class="empty">Aucun message pour ce filtre.</div>';
+    loadMoreBtn.style.display = 'none';
     return;
   }
-  feed.innerHTML = items.map(it => `
+
+  feed.innerHTML = data.items.map(it => `
     <div class="feed-item">
       <div class="feed-top">
         <span class="badge ${it.label}">${it.label} · ${(it.score*100).toFixed(0)}%</span>
@@ -208,6 +271,8 @@ async function loadFeed(){
       </div>
     </div>
   `).join('');
+
+  loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
 }
 
 function escapeHtml(s){
