@@ -325,6 +325,8 @@ function buildCampaignGraph(domains, senders){
   `;
 }
 
+let lastCampaignsSnapshot = null;
+
 async function loadCampaigns(){
   const res = await fetch('/api/campaigns');
   const campaigns = await res.json();
@@ -332,9 +334,23 @@ async function loadCampaigns(){
   const list = document.getElementById('campaignList');
   if(campaigns.length === 0){
     row.style.display = 'none';
+    lastCampaignsSnapshot = null;
     return;
   }
   row.style.display = 'block';
+
+  // Evite de redessiner (et donc de fermer les graphes ouverts) si rien n'a change
+  // depuis le dernier rafraichissement automatique.
+  const snapshot = JSON.stringify(campaigns);
+  if(snapshot === lastCampaignsSnapshot){
+    return;
+  }
+
+  // Memorise quels graphes etaient ouverts avant de redessiner, pour les rouvrir ensuite.
+  const openDomains = new Set();
+  list.querySelectorAll('details[open]').forEach(d => openDomains.add(d.dataset.campaignKey));
+  lastCampaignsSnapshot = snapshot;
+
   list.innerHTML = campaigns.map(c => `
     <div class="campaign-card" style="display:block;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -348,7 +364,7 @@ async function loadCampaigns(){
           <span>${c.first_seen} → ${c.last_seen}</span>
         </div>
       </div>
-      <details style="margin-top:10px;">
+      <details style="margin-top:10px;" data-campaign-key="${escapeHtml(c.domain)}" ${openDomains.has(c.domain) ? 'open' : ''}>
         <summary style="cursor:pointer; font-size:11.5px; color:var(--accent); user-select:none;">Voir le graphe de la campagne</summary>
         ${buildCampaignGraph(c.domains || [], c.senders || [])}
       </details>
