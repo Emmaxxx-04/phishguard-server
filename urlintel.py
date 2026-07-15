@@ -21,6 +21,14 @@ KNOWN_BRANDS = {
     "gmail": ["gmail.com", "google.com"],
     "microsoft": ["microsoft.com", "office.com", "live.com"],
     "paypal": ["paypal.com"],
+    "otr": ["otr.tg"],
+    "dhl": ["dhl.com"],
+    "ems": ["emstogo.tg", "ems.com"],
+    "apple": ["apple.com", "icloud.com"],
+    "netflix": ["netflix.com"],
+    "facebook": ["facebook.com"],
+    "instagram": ["instagram.com"],
+    "amazon": ["amazon.com"],
 }
 
 SUSPICIOUS_TLDS = [".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".info",

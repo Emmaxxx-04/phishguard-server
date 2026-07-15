@@ -21,14 +21,27 @@ URGENCY_WORDS = [
 ]
 
 CREDENTIAL_REQUEST_WORDS = [
-    "code pin", "mot de passe", "code secret", "code otp", "identifiant",
-    "coordonnees bancaires", "numero de carte", "cvv", "code flooz",
-    "informations bancaires",
+    "code pin", "code secret", "code otp", "coordonnees bancaires",
+    "numero de carte", "cvv", "code flooz", "informations bancaires",
 ]
+
+# Patterns contextuels : "mot de passe"/"identifiant" ne sont suspects que combines
+# a un verbe d'action (entrer, confirmer...), pas en simple mention ("ton mot de passe habituel")
+CREDENTIAL_ACTION_PATTERN = re.compile(
+    r"(entrez|entrer|confirmez|confirmer|saisissez|saisir|donnez|donner|"
+    r"communiquez|communiquer|renseignez|renseigner).{0,20}(mot de passe|identifiant)",
+    re.IGNORECASE,
+)
 
 REWARD_SCAM_WORDS = [
     "felicitations", "vous avez gagne", "gagnant", "tirage", "pret sans garantie",
     "vous avez ete selectionne", "reclamer votre gain",
+]
+
+BUSINESS_SCAM_WORDS = [
+    "virement urgent", "confidentiel", "caution", "facture impayee",
+    "nouveau compte", "avant 17h", "ne pas en parler", "arriere d'impot",
+    "frais de douane", "salaire de",
 ]
 
 SUSPICIOUS_LINK_PATTERNS = [
@@ -47,6 +60,9 @@ def rule_based_score(text: str):
 
     for w in URGENCY_WORDS:
         if w in t:
+            # "action requise" precede d'une negation (aucune/pas/sans) = pas suspect
+            if w == "action requise" and re.search(r"(aucune|pas d[e']|sans)\s+action\s+requise", t):
+                continue
             score += 0.15
             reasons.append(f"Langage d'urgence detecte (\"{w}\")")
             break
@@ -57,10 +73,20 @@ def rule_based_score(text: str):
             reasons.append(f"Demande d'information sensible (\"{w}\")")
             break
 
+    if CREDENTIAL_ACTION_PATTERN.search(t):
+        score += 0.30
+        reasons.append("Demande explicite de saisir un mot de passe/identifiant")
+
     for w in REWARD_SCAM_WORDS:
         if w in t:
             score += 0.20
             reasons.append(f"Promesse de gain suspecte (\"{w}\")")
+            break
+
+    for w in BUSINESS_SCAM_WORDS:
+        if w in t:
+            score += 0.20
+            reasons.append(f"Formulation typique d'arnaque professionnelle (\"{w}\")")
             break
 
     for pat in SUSPICIOUS_LINK_PATTERNS:

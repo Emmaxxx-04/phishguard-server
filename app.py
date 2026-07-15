@@ -16,8 +16,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from analyzer import PhishingAnalyzer
+from threat_intel import check_virustotal, check_urlscan
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = Flask(__name__)
 CORS(app)  # autorise l'extension Chrome (chrome-extension://...) a appeler l'API locale
@@ -146,7 +147,13 @@ def get_active_campaigns():
     for cluster in clusters:
         total_senders = sum(c["sender_count"] for c in cluster)
         total_occurrences = sum(c["occurrences"] for c in cluster)
-        if total_senders < 2 and total_occurrences < 2:
+        # Seuil de confirmation : il faut au moins 2 expediteurs DISTINCTS.
+        # Volontairement plus strict qu'un simple comptage d'occurrences :
+        # un seul expediteur qui repete le meme lien plusieurs fois ne doit
+        # pas suffire a faire passer un domaine pour une "campagne confirmee"
+        # (protection basique contre un signalement isole/errone qui polluerait
+        # le tableau de bord).
+        if total_senders < 2:
             continue
         campaigns.append({
             "domain": " / ".join(c["domain"] for c in cluster),
@@ -179,6 +186,41 @@ def get_sender_reputation(sender):
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html")
+
+
+@app.route("/check-url")
+def check_url_page():
+    return render_template("check_url.html")
+
+
+@app.route("/security-checkup")
+def security_checkup_page():
+    return render_template("security_checkup.html")
+
+
+@app.route("/api/threat-intel", methods=["POST"])
+def api_threat_intel():
+    """Enrichissement a la demande via VirusTotal. N'est jamais appele
+    automatiquement dans le flux d'analyse principal (limite de 4 req/min
+    sur le tier gratuit VirusTotal)."""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "url manquante"}), 400
+    result = check_virustotal(url)
+    return jsonify(result)
+
+
+@app.route("/api/urlscan", methods=["POST"])
+def api_urlscan():
+    """Enrichissement a la demande via URLScan.io (capture d'ecran + analyse visuelle).
+    Peut prendre jusqu'a une dizaine de secondes - jamais appele automatiquement."""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "url manquante"}), 400
+    result = check_urlscan(url)
+    return jsonify(result)
 
 
 @app.route("/outlook-addin/<path:filename>")
