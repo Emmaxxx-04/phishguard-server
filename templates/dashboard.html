@@ -69,7 +69,7 @@
   header, .stats-row, .campaign-row, main, footer{position:relative; z-index:1;}
 
   header{
-    padding:26px 40px 22px; border-bottom:1px solid var(--line);
+    padding:22px 40px; border-bottom:1px solid var(--line);
     display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
     backdrop-filter:blur(6px);
   }
@@ -101,7 +101,8 @@
   [data-theme="light"] .theme-toggle .icon-sun{display:block;}
 
   .brand{display:flex; align-items:center; gap:16px;}
-  .logo-mark{height:44px; width:auto; flex:0 0 auto; filter:drop-shadow(0 4px 14px rgba(91,140,255,0.35));}
+  .logo-mark{height:64px; width:auto; flex:0 0 auto; filter:drop-shadow(0 4px 14px rgba(91,140,255,0.35));}
+  @media(max-width:640px){ .logo-mark{height:50px;} }
   h1{font-family:'Space Grotesk',sans-serif; font-size:23px; font-weight:700; margin:0; letter-spacing:-0.01em;
      background:linear-gradient(90deg,#F4F7FC 20%, #B9CBFF 100%); -webkit-background-clip:text; background-clip:text; color:transparent;}
   .sub{color:var(--muted); font-size:12.5px; margin-top:3px; letter-spacing:0.01em;}
@@ -620,8 +621,8 @@ async function loadStats(){
   document.getElementById('statCorrections').innerText = s.corrections;
 }
 
-let loadedCount = 6;
-const PAGE_SIZE = 6;
+let loadedCount = 5;
+const PAGE_SIZE = 5;
 let lastFeedSnapshot = null;
 
 function currentFilters(){
