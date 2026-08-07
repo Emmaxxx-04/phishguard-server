@@ -482,10 +482,10 @@ function toggleTheme(){
 
   function drawHook(h){
     ctx.save();
-    // ligne de peche : discrete
-    ctx.globalAlpha = isLight() ? 0.2 : 0.16;
+    // ligne de peche : un peu plus marquée pour qu'on suive bien sa trajectoire
+    ctx.globalAlpha = isLight() ? 0.42 : 0.38;
     ctx.strokeStyle = hookColor();
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(h.x, 0);
     ctx.lineTo(h.x, h.y);
