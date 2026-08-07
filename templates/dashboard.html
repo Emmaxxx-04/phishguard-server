@@ -103,8 +103,9 @@
   .brand{display:flex; align-items:center; gap:16px;}
   .logo-mark{height:64px; width:auto; flex:0 0 auto; filter:drop-shadow(0 4px 14px rgba(91,140,255,0.35));}
   @media(max-width:640px){ .logo-mark{height:50px;} }
-  h1{font-family:'Space Grotesk',sans-serif; font-size:23px; font-weight:700; margin:0; letter-spacing:-0.01em;
-     background:linear-gradient(90deg,#F4F7FC 20%, #B9CBFF 100%); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  h1 .word-fish{color:var(--accent-2);}
+  h1 .word-guard{color:var(--accent);}
   .sub{color:var(--muted); font-size:12.5px; margin-top:3px; letter-spacing:0.01em;}
 
   .status{
@@ -237,7 +238,7 @@
   <div class="brand">
     <img class="logo-mark" src="/static/img/logo.png" alt="FishGuard">
     <div>
-      <h1>FishGuard</h1>
+      <h1><span class="word-fish">Fish</span><span class="word-guard">Guard</span></h1>
       <div class="sub">Détection automatique de phishing — email, SMS &amp; Mobile Money</div>
     </div>
   </div>
