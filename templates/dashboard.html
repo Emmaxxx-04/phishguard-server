@@ -48,11 +48,11 @@
 
   /* ---------- Ambient fish/hook background ---------- */
   #oceanBg{
-    position:fixed; inset:0; width:100%; height:100%; z-index:0;
-    pointer-events:none;
+    position:fixed; inset:0; width:100%; height:100%; z-index:-1;
+    pointer-events:none; filter:blur(2.2px);
   }
   .bg-gradient{
-    position:fixed; inset:0; z-index:0; pointer-events:none;
+    position:fixed; inset:0; z-index:-3; pointer-events:none;
     background:
       radial-gradient(1100px 620px at 12% -8%, var(--grad-1), transparent 60%),
       radial-gradient(900px 700px at 108% 15%, var(--grad-2), transparent 55%),
@@ -60,7 +60,7 @@
     transition:background .2s ease;
   }
   .bg-noise{
-    position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.035;
+    position:fixed; inset:0; z-index:-2; pointer-events:none; opacity:0.035;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   [data-theme="light"] .bg-noise{opacity:0.018;}
@@ -377,7 +377,7 @@ function toggleTheme(){
       ? ['#3B6EFF', '#2696C9', '#5B8CFF', '#1E4FD9']   // plus saturé/sombre pour rester lisible sur fond clair
       : ['#5B8CFF', '#4FD1FF', '#8AB4FF', '#3B6EFF'];
   }
-  function hookColor(){ return isLight() ? '#3B6EFF' : '#8AB4FF'; }
+  function hookColor(){ return isLight() ? '#B85A2E' : '#E8935A'; }
 
   const FISH_COUNT = window.innerWidth < 720 ? 5 : 9;
 
@@ -456,9 +456,9 @@ function toggleTheme(){
   function drawSplash(x, y, t){
     const r = 4 + t * 1.8;
     ctx.save();
-    ctx.globalAlpha = Math.max(0, (isLight() ? 0.3 : 0.24) - t * 0.014);
+    ctx.globalAlpha = Math.max(0, (isLight() ? 0.32 : 0.28) - t * 0.02);
     ctx.strokeStyle = hookColor();
-    ctx.lineWidth = 1.3;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
@@ -467,16 +467,51 @@ function toggleTheme(){
 
   function drawHook(h){
     ctx.save();
-    ctx.globalAlpha = isLight() ? 0.22 : 0.16;
+    // ligne de peche : discrete
+    ctx.globalAlpha = isLight() ? 0.2 : 0.16;
     ctx.strokeStyle = hookColor();
-    ctx.lineWidth = 1.4;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(h.x, 0);
     ctx.lineTo(h.x, h.y);
     ctx.stroke();
+    // hameçon : visible mais mesuré
+    ctx.globalAlpha = isLight() ? 0.45 : 0.5;
+    ctx.lineWidth = 2.1;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(h.x, h.y + 6, 5, 0.3, Math.PI * 1.3);
+    ctx.arc(h.x, h.y + 6, 6, 0.3, Math.PI * 1.35);
     ctx.stroke();
+    // pointe (petit trait pour lire clairement la forme d'hameçon)
+    ctx.beginPath();
+    ctx.moveTo(h.x - 5.5, h.y + 3.5);
+    ctx.lineTo(h.x - 6.5, h.y - 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Poisson accroché : suit desormais l'hamecon pendant qu'il remonte,
+  // au lieu de disparaitre instantanement. Se debat un peu (wiggle) et
+  // bascule progressivement à la verticale pour donner l'impression
+  // d'etre tiré hors de l'eau.
+  function drawCaughtFish(f, h){
+    const wiggle = Math.sin(h.t * 0.45) * (h.state === 'up' ? 5 : 9);
+    const tilt = h.state === 'up' ? Math.PI / 2.3 : Math.PI / 8;
+    ctx.save();
+    ctx.translate(h.x + wiggle, h.y + 9);
+    ctx.rotate(tilt * f.dir);
+    ctx.scale(f.dir, 1);
+    ctx.globalAlpha = Math.min(f.opacity * 1.6, 0.55);
+    ctx.fillStyle = f.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, f.size, f.size * 0.52, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-f.size * 0.9, 0);
+    ctx.lineTo(-f.size * 1.5, -f.size * 0.5);
+    ctx.lineTo(-f.size * 1.5, f.size * 0.5);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -508,13 +543,19 @@ function toggleTheme(){
         if(hook.t > 18){ hook.state = 'up'; }
       } else if(hook.state === 'up'){
         hook.y -= 2.4;
+        hook.t += 1;
         if(hook.y <= -40){
           const idx = fish.indexOf(hook.target);
           if(idx !== -1) fish[idx] = makeFish();
           hook = null;
         }
       }
-      if(hook) drawHook(hook);
+      if(hook){
+        if(hook.state === 'catch' || hook.state === 'up'){
+          drawCaughtFish(hook.target, hook);
+        }
+        drawHook(hook);
+      }
     }
 
     if(!prefersReducedMotion){
