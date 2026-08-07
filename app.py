@@ -270,6 +270,7 @@ def api_feed():
     offset = int(request.args.get("offset", 0))
     channel_filter = request.args.get("channel", "").strip()
     date_filter = request.args.get("date", "").strip()  # format attendu: YYYY-MM-DD
+    label_filter = request.args.get("label", "").strip().upper()  # PHISHING / SUSPECT / LEGITIME
 
     where_clauses = []
     params = []
@@ -279,6 +280,9 @@ def api_feed():
     if date_filter:
         where_clauses.append("timestamp LIKE ?")
         params.append(f"{date_filter}%")
+    if label_filter in ("PHISHING", "SUSPECT", "LEGITIME"):
+        where_clauses.append("COALESCE(corrected_label, label) = ?")
+        params.append(label_filter)
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
     with DB_LOCK:
@@ -353,6 +357,54 @@ def api_stats():
 @app.route("/api/campaigns")
 def api_campaigns():
     return jsonify(get_active_campaigns())
+
+
+@app.route("/api/analytics")
+def api_analytics():
+    """Donnees agregees pour les graphiques du tableau de bord :
+    repartition par label, taux de menace par canal, tendance sur 14 jours."""
+    with DB_LOCK:
+        conn = get_db()
+        by_label_rows = conn.execute("""
+            SELECT COALESCE(corrected_label, label) AS lbl, COUNT(*) c
+            FROM analyses GROUP BY lbl
+        """).fetchall()
+        by_channel_rows = conn.execute("""
+            SELECT channel,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN COALESCE(corrected_label, label) IN ('PHISHING','SUSPECT') THEN 1 ELSE 0 END) AS threats
+            FROM analyses GROUP BY channel
+        """).fetchall()
+        timeline_rows = conn.execute("""
+            SELECT substr(timestamp, 1, 10) AS day, COUNT(*) c
+            FROM analyses GROUP BY day ORDER BY day DESC LIMIT 14
+        """).fetchall()
+        conn.close()
+
+    by_label = {"PHISHING": 0, "SUSPECT": 0, "LEGITIME": 0}
+    for r in by_label_rows:
+        if r["lbl"] in by_label:
+            by_label[r["lbl"]] = r["c"]
+
+    by_channel = [
+        {
+            "channel": r["channel"],
+            "total": r["total"],
+            "threats": r["threats"] or 0,
+            "threat_pct": round((r["threats"] or 0) / r["total"] * 100, 1) if r["total"] else 0,
+        }
+        for r in by_channel_rows
+    ]
+    by_channel.sort(key=lambda c: c["total"], reverse=True)
+
+    timeline = [{"date": r["day"], "count": r["c"]} for r in timeline_rows]
+    timeline.reverse()  # chronologique (plus ancien -> plus recent)
+
+    return jsonify({
+        "by_label": by_label,
+        "by_channel": by_channel,
+        "timeline": timeline,
+    })
 
 
 @app.route("/api/feedback", methods=["POST"])
