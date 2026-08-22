@@ -28,7 +28,7 @@ from threat_intel import check_virustotal, check_urlscan
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)  # autorise l'extension Chrome (chrome-extension://...) a appeler l'API locale
+CORS(app, supports_credentials=True, allow_headers=["Content-Type", "X-API-Key"])  # autorise l'extension Chrome (chrome-extension://...) a appeler l'API locale, y compris l'en-tete X-API-Key
 # Cle de signature des sessions (cookie de connexion). A definir en variable
 # d'environnement en production (SECRET_KEY) - sinon valeur de secours pour le dev local.
 _SECRET = os.getenv("SECRET_KEY", "dev-secret-key-a-changer-en-production")
@@ -744,6 +744,57 @@ def api_analyze():
     analysis_id = save_analysis(result, user_id=resolve_current_user_id())
     result["id"] = analysis_id
     result["reputation"] = reputation
+    return jsonify(result)
+
+
+@app.route("/api/analyze-page", methods=["POST"])
+@api_key_or_login_required
+def api_analyze_page():
+    """Analyse continue d'une page web en cours de navigation (pas un simple lien
+    clique) : combine l'analyse texte/URL habituelle avec des signaux structurels
+    (champ mot de passe, champ OTP/PIN) que seul le navigateur peut observer.
+    Concu pour etre appele plusieurs fois pendant qu'un utilisateur navigue sur
+    un meme site, afin de detecter une attaque qui se revele progressivement
+    (le formulaire de phishing n'apparait parfois qu'apres plusieurs clics)."""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    visible_text = (data.get("visible_text") or "")[:5000]
+    has_password_field = bool(data.get("has_password_field"))
+    has_otp_field = bool(data.get("has_otp_field"))
+
+    if not url:
+        return jsonify({"error": "url manquante"}), 400
+
+    combined_text = f"{url}\n{visible_text}"
+    result = analyzer.analyze(combined_text, channel="web-page")
+
+    # Bonus structurels : un champ de mot de passe ou de code OTP sur une page
+    # deja un minimum suspecte (typosquat, urgence...) est un signal fort et
+    # tres specifique de phishing actif - c'est precisement ce qui permet au
+    # score de grimper au fil de la navigation, meme si la premiere page visitee
+    # semblait anodine.
+    bonus = 0.0
+    if has_password_field and result["score"] >= 0.20:
+        bonus += 0.20
+        result["reasons"].append("Formulaire de mot de passe detecte sur une page deja suspecte")
+    if has_otp_field:
+        bonus += 0.30
+        result["reasons"].append("Champ de code OTP/PIN detecte sur la page — signe tres specifique de phishing Mobile Money")
+
+    final_score = round(min(result["score"] + bonus, 1.0), 2)
+    result["score"] = final_score
+    if final_score >= 0.55:
+        result["label"] = "PHISHING"
+    elif final_score >= 0.30:
+        result["label"] = "SUSPECT"
+    else:
+        result["label"] = "LEGITIME"
+
+    result["sender"] = url
+    result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    analysis_id = save_analysis(result, user_id=resolve_current_user_id())
+    result["id"] = analysis_id
     return jsonify(result)
 
 
