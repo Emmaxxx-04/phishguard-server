@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connexion — FishGuard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F1E; --bg-deep:#060910;
+    --panel:rgba(18,27,46,0.9); --panel-2:rgba(24,38,66,0.9); --line:#233150;
+    --text:#E7ECF6; --muted:#7C8AA8;
+    --danger:#FF5470;
+    --accent:#5B8CFF; --accent-2:#4FD1FF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; font-family:'Inter',sans-serif; color:var(--text);
+    background:
+      radial-gradient(1100px 620px at 12% -8%, rgba(91,140,255,0.14), transparent 60%),
+      radial-gradient(900px 700px at 108% 15%, rgba(79,209,255,0.09), transparent 55%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card{
+    width:100%; max-width:400px; background:var(--panel); border:1px solid var(--line);
+    border-radius:16px; padding:36px 32px; backdrop-filter:blur(10px);
+    box-shadow:0 20px 50px -30px rgba(0,0,0,0.6);
+  }
+  .logo-row{display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:24px;}
+  .logo-row img{height:52px; width:auto;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; margin:0; text-align:center;}
+  .sub{color:var(--muted); font-size:13px; text-align:center; margin-top:4px;}
+  label{display:block; font-size:12px; color:var(--muted); margin:18px 0 6px; text-transform:uppercase; letter-spacing:0.03em;}
+  input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
+    color:var(--text); padding:11px 12px; font-family:'Inter',sans-serif; font-size:14px;
+  }
+  input:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+  button{
+    width:100%; margin-top:22px; background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#07101F; border:none; border-radius:9px; padding:13px; font-weight:700; font-size:14px;
+    cursor:pointer; box-shadow:0 8px 24px -8px rgba(91,140,255,0.55);
+  }
+  button:hover{box-shadow:0 10px 28px -6px rgba(91,140,255,0.7);}
+  .error{
+    background:rgba(255,84,112,0.12); border:1px solid rgba(255,84,112,0.4); color:var(--danger);
+    border-radius:9px; padding:10px 12px; font-size:13px; margin-top:18px;
+  }
+  .footer-link{text-align:center; margin-top:22px; font-size:13px; color:var(--muted);}
+  .footer-link a{color:var(--accent-2); text-decoration:none; font-weight:600;}
+  .footer-link a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-row">
+      <img src="/static/img/logo.png" alt="FishGuard">
+      <div>
+        <h1>Connexion à FishGuard</h1>
+        <div class="sub">On ne mord plus à l'hameçon</div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/login{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autofocus placeholder="vous@exemple.com">
+
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" name="password" required placeholder="••••••••">
+
+      <button type="submit">Se connecter</button>
+    </form>
+
+    <div class="footer-link">Pas encore de compte ? <a href="/register">Créer un compte</a></div>
+  </div>
+</body>
+</html>

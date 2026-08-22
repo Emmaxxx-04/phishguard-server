@@ -3,17 +3,24 @@ PhishGuard Togo - Detection automatique de phishing (email + SMS/autres canaux)
 Lancement: python3 app.py
 """
 import os
+import re
 import threading
 import time
 import sqlite3
+import secrets
+import base64
+import hashlib
 import imaplib
 import email
 from email.header import decode_header
 from datetime import datetime
+from functools import wraps
 
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
+from cryptography.fernet import Fernet, InvalidToken
 
 from analyzer import PhishingAnalyzer
 from threat_intel import check_virustotal, check_urlscan
@@ -21,8 +28,26 @@ from threat_intel import check_virustotal, check_urlscan
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 app = Flask(__name__)
-CORS(app)  # autorise l'extension Chrome (chrome-extension://...) a appeler l'API locale
+CORS(app, supports_credentials=True)  # autorise l'extension Chrome (chrome-extension://...) a appeler l'API locale
+# Cle de signature des sessions (cookie de connexion). A definir en variable
+# d'environnement en production (SECRET_KEY) - sinon valeur de secours pour le dev local.
+_SECRET = os.getenv("SECRET_KEY", "dev-secret-key-a-changer-en-production")
+app.secret_key = _SECRET
 analyzer = PhishingAnalyzer()
+
+# Cle de chiffrement des mots de passe IMAP stockes en base, derivee de SECRET_KEY
+# (jamais stockee en clair). Changer SECRET_KEY en production rendrait les
+# connexions boite mail existantes illisibles - il faudrait alors les reconnecter.
+_FERNET = Fernet(base64.urlsafe_b64encode(hashlib.sha256(_SECRET.encode()).digest()))
+
+def encrypt_secret(plain):
+    return _FERNET.encrypt(plain.encode()).decode()
+
+def decrypt_secret(token):
+    try:
+        return _FERNET.decrypt(token.encode()).decode()
+    except InvalidToken:
+        return None
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "phishguard.db")
 DB_LOCK = threading.Lock()
@@ -66,6 +91,44 @@ def init_db():
                 timestamp TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                display_name TEXT,
+                api_key TEXT UNIQUE,
+                created_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mailbox_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                imap_host TEXT NOT NULL,
+                imap_user TEXT NOT NULL,
+                imap_password_enc TEXT NOT NULL,
+                poll_seconds INTEGER DEFAULT 20,
+                created_at TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        """)
+
+        # Migration douce : ajoute la colonne api_key si la base existait deja
+        # sans elle (comptes crees avant ce systeme de cle API).
+        user_cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "api_key" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN api_key TEXT")
+            for row in conn.execute("SELECT id FROM users").fetchall():
+                conn.execute("UPDATE users SET api_key = ? WHERE id = ?",
+                             (secrets.token_hex(24), row["id"]))
+
+        # Migration douce : ajoute la colonne user_id si la base existait deja
+        # sans elle (installations anterieures a l'authentification).
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(analyses)").fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE analyses ADD COLUMN user_id INTEGER")
+
         conn.commit()
         conn.close()
 
@@ -73,15 +136,62 @@ def init_db():
 init_db()
 
 
-def save_analysis(result):
+def login_required(view):
+    """Protege une route web (redirige vers /login) ou une route API (renvoie 401)."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "authentification requise"}), 401
+            return redirect(url_for("login_page", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def get_user_id_from_api_key():
+    """Authentification par cle API : utilisee par l'extension navigateur et
+    l'application mobile, qui n'ont pas de session de connexion (cookie).
+    Cle attendue dans l'en-tete HTTP 'X-API-Key'."""
+    api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        return None
+    with DB_LOCK:
+        conn = get_db()
+        row = conn.execute("SELECT id FROM users WHERE api_key = ?", (api_key,)).fetchone()
+        conn.close()
+    return row["id"] if row else None
+
+
+def resolve_current_user_id():
+    """Identifie l'utilisateur courant, que la requete vienne du tableau de
+    bord web (session/cookie) ou d'un client externe (extension, mobile,
+    poller) authentifie par cle API. Retourne None si aucun des deux."""
+    if "user_id" in session:
+        return session["user_id"]
+    return get_user_id_from_api_key()
+
+
+def api_key_or_login_required(view):
+    """Comme login_required, mais accepte aussi une cle API valide (en-tete
+    X-API-Key) - pour les routes appelees par l'extension ou l'appli mobile,
+    qui n'ont pas de session navigateur."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if resolve_current_user_id() is None:
+            return jsonify({"error": "authentification requise (session ou cle API)"}), 401
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def save_analysis(result, user_id=None):
     with DB_LOCK:
         conn = get_db()
         cur = conn.execute(
-            "INSERT INTO analyses (channel, sender, text, score, label, reasons, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO analyses (channel, sender, text, score, label, reasons, timestamp, user_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (result["channel"], result.get("sender", "inconnu"), result["text"],
              result["score"], result["label"], "|||".join(result["reasons"]),
-             result["timestamp"])
+             result["timestamp"], user_id)
         )
         analysis_id = cur.lastrowid
 
@@ -213,9 +323,162 @@ def get_sender_reputation(sender):
 # Historique en memoire desactive : tout passe maintenant par SQLite (voir save_analysis)
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if request.method == "GET":
+        return render_template("login.html", error=None)
+
+    email_addr = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+
+    with DB_LOCK:
+        conn = get_db()
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email_addr,)).fetchone()
+        conn.close()
+
+    if not row or not check_password_hash(row["password_hash"], password):
+        return render_template("login.html", error="Email ou mot de passe incorrect."), 401
+
+    session["user_id"] = row["id"]
+    session["user_email"] = row["email"]
+    session["user_name"] = row["display_name"] or row["email"].split("@")[0]
+
+    next_url = request.args.get("next") or url_for("dashboard")
+    return redirect(next_url)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register_page():
+    if request.method == "GET":
+        return render_template("register.html", error=None)
+
+    email_addr = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    display_name = request.form.get("display_name", "").strip()
+
+    if not email_addr or not password:
+        return render_template("register.html", error="Email et mot de passe requis."), 400
+    if len(password) < 6:
+        return render_template("register.html", error="Le mot de passe doit faire au moins 6 caracteres."), 400
+
+    with DB_LOCK:
+        conn = get_db()
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email_addr,)).fetchone()
+        if existing:
+            conn.close()
+            return render_template("register.html", error="Un compte existe deja avec cet email."), 400
+
+        is_first_user = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0
+
+        new_api_key = secrets.token_hex(24)
+        cur = conn.execute(
+            "INSERT INTO users (email, password_hash, display_name, api_key, created_at) VALUES (?, ?, ?, ?, ?)",
+            (email_addr, generate_password_hash(password), display_name, new_api_key,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        user_id = cur.lastrowid
+
+        # Le tout premier compte cree herite des analyses existantes qui
+        # n'appartenaient encore a personne (donnees de test anterieures
+        # a l'authentification) - evite un dashboard qui parait "vide"
+        # au premier lancement apres cette mise a jour.
+        if is_first_user:
+            conn.execute("UPDATE analyses SET user_id = ? WHERE user_id IS NULL", (user_id,))
+
+        conn.commit()
+        conn.close()
+
+    session["user_id"] = user_id
+    session["user_email"] = email_addr
+    session["user_name"] = display_name or email_addr.split("@")[0]
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+
 @app.route("/")
+@login_required
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", user_name=session.get("user_name"))
+
+
+@app.route("/settings")
+@login_required
+def settings_page():
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        mailbox = conn.execute(
+            "SELECT * FROM mailbox_connections WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        conn.close()
+    return render_template("settings.html", user=user, mailbox=mailbox, error=None, saved=False)
+
+
+@app.route("/settings/regenerate-key", methods=["POST"])
+@login_required
+def regenerate_api_key():
+    new_key = secrets.token_hex(24)
+    with DB_LOCK:
+        conn = get_db()
+        conn.execute("UPDATE users SET api_key = ? WHERE id = ?", (new_key, session["user_id"]))
+        conn.commit()
+        conn.close()
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/mailbox", methods=["POST"])
+@login_required
+def connect_mailbox():
+    imap_host = request.form.get("imap_host", "").strip()
+    imap_user = request.form.get("imap_user", "").strip()
+    imap_password = request.form.get("imap_password", "").strip()
+    poll_seconds = int(request.form.get("poll_seconds", 20) or 20)
+
+    if not (imap_host and imap_user and imap_password):
+        with DB_LOCK:
+            conn = get_db()
+            user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+            conn.close()
+        return render_template("settings.html", user=user, mailbox=None,
+                                error="Hote, email et mot de passe requis.", saved=False), 400
+
+    with DB_LOCK:
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT id FROM mailbox_connections WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        enc_password = encrypt_secret(imap_password)
+        if existing:
+            conn.execute(
+                "UPDATE mailbox_connections SET imap_host=?, imap_user=?, imap_password_enc=?, poll_seconds=? WHERE id=?",
+                (imap_host, imap_user, enc_password, poll_seconds, existing["id"])
+            )
+        else:
+            conn.execute(
+                "INSERT INTO mailbox_connections (user_id, imap_host, imap_user, imap_password_enc, poll_seconds, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (session["user_id"], imap_host, imap_user, enc_password, poll_seconds,
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+        conn.commit()
+        conn.close()
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/mailbox/delete", methods=["POST"])
+@login_required
+def disconnect_mailbox():
+    with DB_LOCK:
+        conn = get_db()
+        conn.execute("DELETE FROM mailbox_connections WHERE user_id = ?", (session["user_id"],))
+        conn.commit()
+        conn.close()
+    return redirect(url_for("settings_page"))
 
 
 @app.route("/check-url")
@@ -265,6 +528,7 @@ def outlook_addin_files(filename):
 
 
 @app.route("/api/feed")
+@login_required
 def api_feed():
     limit = min(int(request.args.get("limit", 5)), 100)
     offset = int(request.args.get("offset", 0))
@@ -272,8 +536,9 @@ def api_feed():
     date_filter = request.args.get("date", "").strip()  # format attendu: YYYY-MM-DD
     label_filter = request.args.get("label", "").strip().upper()  # PHISHING / SUSPECT / LEGITIME
 
-    where_clauses = []
-    params = []
+    # Chaque utilisateur ne voit que ses propres analyses.
+    where_clauses = ["user_id = ?"]
+    params = [session["user_id"]]
     if channel_filter:
         where_clauses.append("channel = ?")
         params.append(channel_filter)
@@ -295,7 +560,8 @@ def api_feed():
             params + [limit, offset]
         ).fetchall()
         channels = conn.execute(
-            "SELECT DISTINCT channel FROM analyses ORDER BY channel"
+            "SELECT DISTINCT channel FROM analyses WHERE user_id = ? ORDER BY channel",
+            (session["user_id"],)
         ).fetchall()
         conn.close()
 
@@ -325,21 +591,25 @@ def api_feed():
 
 
 @app.route("/api/stats")
+@login_required
 def api_stats():
+    uid = session["user_id"]
     with DB_LOCK:
         conn = get_db()
-        total = conn.execute("SELECT COUNT(*) c FROM analyses").fetchone()["c"]
+        total = conn.execute("SELECT COUNT(*) c FROM analyses WHERE user_id = ?", (uid,)).fetchone()["c"]
         threats = conn.execute(
-            "SELECT COUNT(*) c FROM analyses WHERE label IN ('PHISHING','SUSPECT')"
+            "SELECT COUNT(*) c FROM analyses WHERE user_id = ? AND label IN ('PHISHING','SUSPECT')", (uid,)
         ).fetchone()["c"]
         by_channel = conn.execute(
-            "SELECT channel, COUNT(*) c FROM analyses GROUP BY channel"
+            "SELECT channel, COUNT(*) c FROM analyses WHERE user_id = ? GROUP BY channel", (uid,)
         ).fetchall()
+        # Reputation des expediteurs : reste globale (intelligence partagee entre
+        # utilisateurs, ne revele pas le contenu des messages de chacun).
         repeat_offenders = conn.execute(
             "SELECT COUNT(*) c FROM sender_reputation WHERE phishing_count >= 1 AND total_count > 1"
         ).fetchone()["c"]
         corrections = conn.execute(
-            "SELECT COUNT(*) c FROM analyses WHERE corrected_label IS NOT NULL"
+            "SELECT COUNT(*) c FROM analyses WHERE user_id = ? AND corrected_label IS NOT NULL", (uid,)
         ).fetchone()["c"]
         conn.close()
 
@@ -360,25 +630,28 @@ def api_campaigns():
 
 
 @app.route("/api/analytics")
+@login_required
 def api_analytics():
     """Donnees agregees pour les graphiques du tableau de bord :
-    repartition par label, taux de menace par canal, tendance sur 14 jours."""
+    repartition par label, taux de menace par canal, tendance sur 14 jours.
+    Toujours filtre sur les analyses du seul utilisateur connecte."""
+    uid = session["user_id"]
     with DB_LOCK:
         conn = get_db()
         by_label_rows = conn.execute("""
             SELECT COALESCE(corrected_label, label) AS lbl, COUNT(*) c
-            FROM analyses GROUP BY lbl
-        """).fetchall()
+            FROM analyses WHERE user_id = ? GROUP BY lbl
+        """, (uid,)).fetchall()
         by_channel_rows = conn.execute("""
             SELECT channel,
                    COUNT(*) AS total,
                    SUM(CASE WHEN COALESCE(corrected_label, label) IN ('PHISHING','SUSPECT') THEN 1 ELSE 0 END) AS threats
-            FROM analyses GROUP BY channel
-        """).fetchall()
+            FROM analyses WHERE user_id = ? GROUP BY channel
+        """, (uid,)).fetchall()
         timeline_rows = conn.execute("""
             SELECT substr(timestamp, 1, 10) AS day, COUNT(*) c
-            FROM analyses GROUP BY day ORDER BY day DESC LIMIT 14
-        """).fetchall()
+            FROM analyses WHERE user_id = ? GROUP BY day ORDER BY day DESC LIMIT 14
+        """, (uid,)).fetchall()
         conn.close()
 
     by_label = {"PHISHING": 0, "SUSPECT": 0, "LEGITIME": 0}
@@ -408,8 +681,10 @@ def api_analytics():
 
 
 @app.route("/api/feedback", methods=["POST"])
+@login_required
 def api_feedback():
-    """Permet de corriger une analyse (faux positif/negatif) - alimente l'amelioration continue."""
+    """Permet de corriger une analyse (faux positif/negatif) - alimente l'amelioration continue.
+    Restreint aux analyses appartenant a l'utilisateur connecte."""
     data = request.get_json(force=True)
     analysis_id = data.get("id")
     corrected_label = data.get("label")
@@ -418,6 +693,11 @@ def api_feedback():
 
     with DB_LOCK:
         conn = get_db()
+        owner = conn.execute("SELECT user_id FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+        if not owner or owner["user_id"] != session["user_id"]:
+            conn.close()
+            return jsonify({"error": "analyse introuvable"}), 404
+
         conn.execute(
             "UPDATE analyses SET corrected_label = ? WHERE id = ?",
             (corrected_label, analysis_id)
@@ -438,8 +718,11 @@ def api_feedback():
 
 
 @app.route("/api/analyze", methods=["POST"])
+@api_key_or_login_required
 def api_analyze():
-    """Point d'entree generique : email, SMS simule, ou autre canal futur."""
+    """Point d'entree generique : email, SMS simule, ou autre canal futur.
+    Accepte soit une session navigateur (dashboard), soit une cle API en
+    en-tete X-API-Key (extension, application mobile)."""
     data = request.get_json(force=True)
     text = data.get("text", "")
     channel = data.get("channel", "sms")
@@ -458,7 +741,7 @@ def api_analyze():
             f"Expediteur recidiviste : deja flagge {reputation['phishing_count']}/{reputation['total_count']} fois"
         )
 
-    analysis_id = save_analysis(result)
+    analysis_id = save_analysis(result, user_id=resolve_current_user_id())
     result["id"] = analysis_id
     result["reputation"] = reputation
     return jsonify(result)
@@ -522,75 +805,93 @@ def analyze_attachments(msg):
 
 
 # ---------------------------------------------------------------------------
-# Poller Email IMAP (automatique) - tourne en arriere-plan si configure
+# Poller Email IMAP (automatique) - boucle sur TOUTES les boites que les
+# utilisateurs ont connectees dans leurs reglages (table mailbox_connections),
+# chacune analysee et rattachee a son propre proprietaire.
 # ---------------------------------------------------------------------------
-def imap_poll_loop():
-    host = os.getenv("IMAP_HOST")
-    user = os.getenv("IMAP_USER")
-    password = os.getenv("IMAP_PASSWORD")
-    interval = int(os.getenv("IMAP_POLL_SECONDS", "20"))
+def get_all_mailbox_connections():
+    with DB_LOCK:
+        conn = get_db()
+        rows = conn.execute("SELECT * FROM mailbox_connections").fetchall()
+        conn.close()
+    return rows
 
-    if not (host and user and password):
-        print("[IMAP] Non configure (.env manquant) - poller email desactive.")
+
+def poll_one_mailbox(connection, seen_uids_by_conn):
+    conn_id = connection["id"]
+    user_id = connection["user_id"]
+    host = connection["imap_host"]
+    user = connection["imap_user"]
+    password = decrypt_secret(connection["imap_password_enc"])
+    if password is None:
+        print(f"[IMAP] Connexion #{conn_id} : mot de passe illisible (SECRET_KEY a change ?), ignoree.")
         return
 
-    seen_uids = set()
-    print(f"[IMAP] Poller demarre sur {user} (toutes les {interval}s)")
+    try:
+        mail = imaplib.IMAP4_SSL(host)
+        mail.login(user, password)
+        mail.select("inbox")
+        status, data = mail.search(None, "UNSEEN")
+        for num in data[0].split():
+            status, msg_data = mail.fetch(num, "(RFC822)")
+            raw = msg_data[0][1]
+            msg = email.message_from_bytes(raw)
 
+            subject, encoding = decode_header(msg["Subject"])[0] if msg["Subject"] else ("", None)
+            if isinstance(subject, bytes):
+                subject = subject.decode(encoding or "utf-8", errors="ignore")
+
+            sender = msg.get("From", "inconnu")
+
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body += part.get_payload(decode=True).decode(errors="ignore")
+            else:
+                body = msg.get_payload(decode=True).decode(errors="ignore")
+
+            full_text = f"{subject}\n{body}".strip()
+            result = analyzer.analyze(full_text, channel="email")
+            result["sender"] = sender
+            result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            header_score, header_reasons = analyze_email_headers(msg)
+            attach_score, attach_reasons = analyze_attachments(msg)
+            if header_reasons or attach_reasons:
+                result["reasons"].extend(header_reasons)
+                result["reasons"].extend(attach_reasons)
+                result["score"] = round(min(result["score"] + header_score + attach_score, 1.0), 2)
+                if result["score"] >= 0.55:
+                    result["label"] = "PHISHING"
+                elif result["score"] >= 0.30:
+                    result["label"] = "SUSPECT"
+
+            reputation = get_sender_reputation(sender)
+            if reputation["repeat_offender"]:
+                result["reasons"].append(
+                    f"Expediteur recidiviste : deja flagge {reputation['phishing_count']}/{reputation['total_count']} fois"
+                )
+            save_analysis(result, user_id=user_id)
+            print(f"[IMAP] ({user}) Nouveau mail analyse: {result['label']} ({result['score']}) - {sender}")
+
+        mail.logout()
+    except Exception as e:
+        print(f"[IMAP] Erreur sur la boite {user} (connexion #{conn_id}): {e}")
+
+
+def imap_poll_loop():
+    print("[IMAP] Poller multi-boites demarre - verifie mailbox_connections toutes les 20s.")
     while True:
-        try:
-            mail = imaplib.IMAP4_SSL(host)
-            mail.login(user, password)
-            mail.select("inbox")
-            status, data = mail.search(None, "UNSEEN")
-            for num in data[0].split():
-                status, msg_data = mail.fetch(num, "(RFC822)")
-                raw = msg_data[0][1]
-                msg = email.message_from_bytes(raw)
-
-                subject, encoding = decode_header(msg["Subject"])[0] if msg["Subject"] else ("", None)
-                if isinstance(subject, bytes):
-                    subject = subject.decode(encoding or "utf-8", errors="ignore")
-
-                sender = msg.get("From", "inconnu")
-
-                body = ""
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        if part.get_content_type() == "text/plain":
-                            body += part.get_payload(decode=True).decode(errors="ignore")
-                else:
-                    body = msg.get_payload(decode=True).decode(errors="ignore")
-
-                full_text = f"{subject}\n{body}".strip()
-                result = analyzer.analyze(full_text, channel="email")
-                result["sender"] = sender
-                result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                header_score, header_reasons = analyze_email_headers(msg)
-                attach_score, attach_reasons = analyze_attachments(msg)
-                if header_reasons or attach_reasons:
-                    result["reasons"].extend(header_reasons)
-                    result["reasons"].extend(attach_reasons)
-                    result["score"] = round(min(result["score"] + header_score + attach_score, 1.0), 2)
-                    if result["score"] >= 0.55:
-                        result["label"] = "PHISHING"
-                    elif result["score"] >= 0.30:
-                        result["label"] = "SUSPECT"
-
-                reputation = get_sender_reputation(sender)
-                if reputation["repeat_offender"]:
-                    result["reasons"].append(
-                        f"Expediteur recidiviste : deja flagge {reputation['phishing_count']}/{reputation['total_count']} fois"
-                    )
-                save_analysis(result)
-                print(f"[IMAP] Nouveau mail analyse: {result['label']} ({result['score']}) - {sender}")
-
-            mail.logout()
-        except Exception as e:
-            print(f"[IMAP] Erreur poller: {e}")
-
-        time.sleep(interval)
+        connections = get_all_mailbox_connections()
+        if not connections:
+            time.sleep(20)
+            continue
+        for connection in connections:
+            poll_one_mailbox(connection, None)
+        # Intervalle base sur la connexion la plus exigeante, borne a 10s minimum
+        min_interval = min((c["poll_seconds"] or 20) for c in connections)
+        time.sleep(max(min_interval, 10))
 
 
 # ---------------------------------------------------------------------------
