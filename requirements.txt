@@ -6,3 +6,4 @@ python-dotenv
 gunicorn
 requests
 cryptography
+psycopg2-binary

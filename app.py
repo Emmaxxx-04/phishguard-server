@@ -6,7 +6,6 @@ import os
 import re
 import threading
 import time
-import sqlite3
 import secrets
 import base64
 import hashlib
@@ -16,6 +15,8 @@ from email.header import decode_header
 from datetime import datetime
 from functools import wraps
 
+import psycopg2
+import psycopg2.extras
 from flask import Flask, request, jsonify, render_template, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -49,14 +50,86 @@ def decrypt_secret(token):
     except InvalidToken:
         return None
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "phishguard.db")
+
+# =============================================================================
+# Couche base de donnees : Postgres (Neon), avec une petite compatibilite qui
+# garde la meme facon d'ecrire le code partout ailleurs dans ce fichier
+# (conn.execute(...) -> objet avec .fetchone()/.fetchall(), acces aux colonnes
+# par nom via row["colonne"], .lastrowid apres un INSERT ... RETURNING id).
+# Auparavant sur SQLite (fichier local) : perdait toutes les donnees a chaque
+# redemarrage/redeploiement sur l'hebergement gratuit -> Postgres externe
+# (Neon, gratuit et persistant) regle definitivement ce probleme.
+# =============================================================================
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL manquante. Definis cette variable d'environnement avec "
+        "ta chaine de connexion Postgres (ex: fournie par Neon), au format "
+        "postgresql://utilisateur:motdepasse@hote/nom_base"
+    )
+
 DB_LOCK = threading.Lock()
 
 
+class _CursorResult:
+    """Enveloppe un curseur psycopg2 pour que .lastrowid fonctionne comme sur
+    sqlite3, en lisant la valeur renvoyee par un INSERT ... RETURNING id."""
+    def __init__(self, cursor, lastrowid=None):
+        self._cursor = cursor
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+class PGConnection:
+    """Compatibilite avec l'API sqlite3 utilisee dans le reste du code :
+    conn.execute(sql, params) directement sur la connexion (pas besoin de
+    gerer un curseur explicitement), placeholders '?' traduits en '%s'."""
+    def __init__(self, pg_conn):
+        self._conn = pg_conn
+
+    def execute(self, query, params=()):
+        translated = query.replace("?", "%s")
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(translated, tuple(params) if params else None)
+
+        if translated.strip().upper().startswith("INSERT") and "RETURNING" in translated.upper():
+            row = cur.fetchone()
+            lastrowid = row.get("id") if row else None
+            # Garde la ligne disponible si l'appelant fait aussi un .fetchone()
+            # (comportement souvent attendu apres un INSERT ... RETURNING).
+            return _CursorResult(_FakeFetchedCursor([row] if row else []), lastrowid=lastrowid)
+
+        return _CursorResult(cur)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
+class _FakeFetchedCursor:
+    """Petit adaptateur pour renvoyer une ligne deja recuperee (cas d'un
+    INSERT ... RETURNING id, dont la ligne est consommee pour lastrowid mais
+    doit rester disponible si l'appelant fait aussi .fetchone())."""
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return self._rows
+
+
 def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    pg_conn = psycopg2.connect(DATABASE_URL)
+    return PGConnection(pg_conn)
 
 
 def init_db():
@@ -64,7 +137,7 @@ def init_db():
         conn = get_db()
         conn.execute("""
             CREATE TABLE IF NOT EXISTS analyses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 channel TEXT,
                 sender TEXT,
                 text TEXT,
@@ -84,7 +157,7 @@ def init_db():
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS domain_sightings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 domain TEXT,
                 sender TEXT,
                 analysis_id INTEGER,
@@ -93,7 +166,7 @@ def init_db():
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 display_name TEXT,
@@ -103,7 +176,7 @@ def init_db():
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mailbox_connections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 imap_host TEXT NOT NULL,
                 imap_user TEXT NOT NULL,
@@ -116,7 +189,9 @@ def init_db():
 
         # Migration douce : ajoute la colonne api_key si la base existait deja
         # sans elle (comptes crees avant ce systeme de cle API).
-        user_cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+        user_cols = [r["column_name"] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+        ).fetchall()]
         if "api_key" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN api_key TEXT")
             for row in conn.execute("SELECT id FROM users").fetchall():
@@ -125,7 +200,9 @@ def init_db():
 
         # Migration douce : ajoute la colonne user_id si la base existait deja
         # sans elle (installations anterieures a l'authentification).
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(analyses)").fetchall()]
+        cols = [r["column_name"] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'analyses'"
+        ).fetchall()]
         if "user_id" not in cols:
             conn.execute("ALTER TABLE analyses ADD COLUMN user_id INTEGER")
 
@@ -188,7 +265,7 @@ def save_analysis(result, user_id=None):
         conn = get_db()
         cur = conn.execute(
             "INSERT INTO analyses (channel, sender, text, score, label, reasons, timestamp, user_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             (result["channel"], result.get("sender", "inconnu"), result["text"],
              result["score"], result["label"], "|||".join(result["reasons"]),
              result["timestamp"], user_id)
@@ -201,8 +278,8 @@ def save_analysis(result, user_id=None):
             INSERT INTO sender_reputation (sender, phishing_count, total_count)
             VALUES (?, ?, 1)
             ON CONFLICT(sender) DO UPDATE SET
-                phishing_count = phishing_count + ?,
-                total_count = total_count + 1
+                phishing_count = sender_reputation.phishing_count + ?,
+                total_count = sender_reputation.total_count + 1
         """, (sender, is_threat, is_threat))
 
         if is_threat:
@@ -372,7 +449,7 @@ def register_page():
 
         new_api_key = secrets.token_hex(24)
         cur = conn.execute(
-            "INSERT INTO users (email, password_hash, display_name, api_key, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO users (email, password_hash, display_name, api_key, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
             (email_addr, generate_password_hash(password), display_name, new_api_key,
              datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         )
@@ -404,6 +481,32 @@ def logout():
 @login_required
 def dashboard():
     return render_template("dashboard.html", user_name=session.get("user_name"))
+
+
+@app.route("/admin/users")
+@login_required
+def admin_users():
+    """Vue de debogage : liste tous les comptes et un resume de leur activite.
+    Reservee au tout premier compte cree (id=1), considere comme le
+    proprietaire/administrateur du projet - les autres utilisateurs recoivent
+    une erreur 403 s'ils essaient d'y acceder."""
+    if session["user_id"] != 1:
+        return jsonify({"error": "acces reserve a l'administrateur"}), 403
+
+    with DB_LOCK:
+        conn = get_db()
+        users = conn.execute("""
+            SELECT u.id, u.email, u.display_name, u.created_at,
+                   COUNT(a.id) AS analyses_count,
+                   (SELECT COUNT(*) FROM mailbox_connections m WHERE m.user_id = u.id) AS mailbox_count
+            FROM users u
+            LEFT JOIN analyses a ON a.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.id ASC
+        """).fetchall()
+        conn.close()
+
+    return render_template("admin_users.html", users=users)
 
 
 @app.route("/settings")
