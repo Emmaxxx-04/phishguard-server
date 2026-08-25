@@ -134,32 +134,44 @@ def consume_email_token(token, purpose):
 
 
 def send_verification_email(user_id, email_addr):
-    token = create_email_token(user_id, "verify", hours_valid=48)
-    link = f"{APP_BASE_URL}/verify-email/{token}"
-    body = (
-        "Bonjour,\n\n"
-        "Merci de vous être inscrit sur FishGuard.\n"
-        "Confirmez votre adresse email en cliquant sur ce lien (valable 48h) :\n\n"
-        f"{link}\n\n"
-        "Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.\n\n"
-        "— L'équipe FishGuard"
-    )
-    return send_email(email_addr, "Confirmez votre adresse email — FishGuard", body)
+    """Ne doit jamais faire planter l'appelant (inscription, changement
+    d'email) : toute erreur ici est loggee et avalee, l'email est simplement
+    considere comme non envoye."""
+    try:
+        token = create_email_token(user_id, "verify", hours_valid=48)
+        link = f"{APP_BASE_URL}/verify-email/{token}"
+        body = (
+            "Bonjour,\n\n"
+            "Merci de vous être inscrit sur FishGuard.\n"
+            "Confirmez votre adresse email en cliquant sur ce lien (valable 48h) :\n\n"
+            f"{link}\n\n"
+            "Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.\n\n"
+            "— L'équipe FishGuard"
+        )
+        return send_email(email_addr, "Confirmez votre adresse email — FishGuard", body)
+    except Exception as e:
+        print(f"[EMAIL] send_verification_email a echoue pour {email_addr}: {e}")
+        return False
 
 
 def send_password_reset_email(user_id, email_addr):
-    token = create_email_token(user_id, "reset", hours_valid=1)
-    link = f"{APP_BASE_URL}/reset-password/{token}"
-    body = (
-        "Bonjour,\n\n"
-        "Vous avez demandé à réinitialiser votre mot de passe FishGuard.\n"
-        "Ce lien est valable 1 heure :\n\n"
-        f"{link}\n\n"
-        "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — "
-        "votre mot de passe actuel reste inchangé.\n\n"
-        "— L'équipe FishGuard"
-    )
-    return send_email(email_addr, "Réinitialisation de votre mot de passe — FishGuard", body)
+    """Meme principe : ne doit jamais faire planter l'appelant."""
+    try:
+        token = create_email_token(user_id, "reset", hours_valid=1)
+        link = f"{APP_BASE_URL}/reset-password/{token}"
+        body = (
+            "Bonjour,\n\n"
+            "Vous avez demandé à réinitialiser votre mot de passe FishGuard.\n"
+            "Ce lien est valable 1 heure :\n\n"
+            f"{link}\n\n"
+            "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — "
+            "votre mot de passe actuel reste inchangé.\n\n"
+            "— L'équipe FishGuard"
+        )
+        return send_email(email_addr, "Réinitialisation de votre mot de passe — FishGuard", body)
+    except Exception as e:
+        print(f"[EMAIL] send_password_reset_email a echoue pour {email_addr}: {e}")
+        return False
 
 
 # =============================================================================
@@ -566,32 +578,39 @@ def register_page():
     if len(password) < 6:
         return render_template("register.html", error="Le mot de passe doit faire au moins 6 caracteres."), 400
 
-    with DB_LOCK:
-        conn = get_db()
-        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email_addr,)).fetchone()
-        if existing:
+    try:
+        with DB_LOCK:
+            conn = get_db()
+            existing = conn.execute("SELECT id FROM users WHERE email = ?", (email_addr,)).fetchone()
+            if existing:
+                conn.close()
+                return render_template("register.html", error="Un compte existe deja avec cet email."), 400
+
+            is_first_user = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0
+
+            new_api_key = secrets.token_hex(24)
+            cur = conn.execute(
+                "INSERT INTO users (email, password_hash, display_name, api_key, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
+                (email_addr, generate_password_hash(password), display_name, new_api_key,
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            user_id = cur.lastrowid
+
+            # Le tout premier compte cree herite des analyses existantes qui
+            # n'appartenaient encore a personne (donnees de test anterieures
+            # a l'authentification) - evite un dashboard qui parait "vide"
+            # au premier lancement apres cette mise a jour.
+            if is_first_user:
+                conn.execute("UPDATE analyses SET user_id = ? WHERE user_id IS NULL", (user_id,))
+
+            conn.commit()
             conn.close()
-            return render_template("register.html", error="Un compte existe deja avec cet email."), 400
-
-        is_first_user = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0
-
-        new_api_key = secrets.token_hex(24)
-        cur = conn.execute(
-            "INSERT INTO users (email, password_hash, display_name, api_key, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id",
-            (email_addr, generate_password_hash(password), display_name, new_api_key,
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        user_id = cur.lastrowid
-
-        # Le tout premier compte cree herite des analyses existantes qui
-        # n'appartenaient encore a personne (donnees de test anterieures
-        # a l'authentification) - evite un dashboard qui parait "vide"
-        # au premier lancement apres cette mise a jour.
-        if is_first_user:
-            conn.execute("UPDATE analyses SET user_id = ? WHERE user_id IS NULL", (user_id,))
-
-        conn.commit()
-        conn.close()
+    except Exception as e:
+        print(f"[REGISTER] Echec de creation de compte pour {email_addr}: {e}")
+        return render_template(
+            "register.html",
+            error="Une erreur technique est survenue. Réessayez dans quelques instants."
+        ), 500
 
     session["user_id"] = user_id
     session["user_email"] = email_addr
