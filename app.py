@@ -864,6 +864,7 @@ def api_analyze_page():
     visible_text = (data.get("visible_text") or "")[:5000]
     has_password_field = bool(data.get("has_password_field"))
     has_otp_field = bool(data.get("has_otp_field"))
+    has_phone_field = bool(data.get("has_phone_field"))
 
     if not url:
         return jsonify({"error": "url manquante"}), 400
@@ -883,6 +884,9 @@ def api_analyze_page():
     if has_otp_field:
         bonus += 0.30
         result["reasons"].append("Champ de code OTP/PIN detecte sur la page — signe tres specifique de phishing Mobile Money")
+    if has_phone_field and result["score"] >= 0.20:
+        bonus += 0.15
+        result["reasons"].append("Champ de collecte de numero de telephone detecte sur une page deja suspecte")
 
     final_score = round(min(result["score"] + bonus, 1.0), 2)
     result["score"] = final_score
