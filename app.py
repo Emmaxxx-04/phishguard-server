@@ -616,7 +616,7 @@ def register_page():
     session["user_email"] = email_addr
     session["user_name"] = display_name or email_addr.split("@")[0]
 
-    send_verification_email(user_id, email_addr)
+    threading.Thread(target=send_verification_email, args=(user_id, email_addr), daemon=True).start()
     return redirect(url_for("dashboard"))
 
 
@@ -651,7 +651,7 @@ def forgot_password_page():
     # Toujours le meme message, que le compte existe ou non - evite de
     # laisser deviner quels emails sont inscrits sur FishGuard.
     if row:
-        send_password_reset_email(row["id"], email_addr)
+        threading.Thread(target=send_password_reset_email, args=(row["id"], email_addr), daemon=True).start()
     return render_template("forgot_password.html", sent=True, error=None)
 
 
@@ -771,7 +771,7 @@ def change_email():
         conn.close()
 
     session["user_email"] = new_email
-    send_verification_email(session["user_id"], new_email)
+    threading.Thread(target=send_verification_email, args=(session["user_id"], new_email), daemon=True).start()
     return redirect(url_for("settings_page"))
 
 
@@ -783,7 +783,7 @@ def resend_verification():
         user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
         conn.close()
     if user and not user["email_verified"]:
-        send_verification_email(user["id"], user["email"])
+        threading.Thread(target=send_verification_email, args=(user["id"], user["email"]), daemon=True).start()
     return redirect(url_for("settings_page"))
 
 
