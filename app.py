@@ -12,7 +12,7 @@ import hashlib
 import imaplib
 import email
 from email.header import decode_header
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 import psycopg2
@@ -49,6 +49,117 @@ def decrypt_secret(token):
         return _FERNET.decrypt(token.encode()).decode()
     except InvalidToken:
         return None
+
+
+# =============================================================================
+# Envoi d'emails (verification de compte, changement d'email, mot de passe
+# oublie) via un compte Gmail dedie, configure par variables d'environnement -
+# meme principe que la boite IMAP surveillee, mais en sortie cette fois.
+# =============================================================================
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_FROM_NAME = "FishGuard"
+APP_BASE_URL = os.getenv("APP_BASE_URL", "https://fishguard.me")
+
+
+def send_email(to_addr, subject, body_text):
+    """Envoie un email simple en texte brut. Retourne True si l'envoi a
+    reussi, False sinon (jamais d'exception qui remonterait jusqu'a
+    l'utilisateur - une panne d'envoi ne doit pas casser le reste du site)."""
+    if not (SMTP_USER and SMTP_PASSWORD):
+        print("[EMAIL] SMTP_USER/SMTP_PASSWORD non configures - email non envoye.")
+        return False
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body_text, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+        msg["To"] = to_addr
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, [to_addr], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[EMAIL] Echec d'envoi vers {to_addr}: {e}")
+        return False
+
+
+def create_email_token(user_id, purpose, hours_valid=24):
+    """Cree un jeton a usage unique (verification d'email ou reinitialisation
+    de mot de passe), valable un temps limite."""
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now() + timedelta(hours=hours_valid)).strftime("%Y-%m-%d %H:%M:%S")
+    with DB_LOCK:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO email_tokens (user_id, token, purpose, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, token, purpose, expires_at, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        conn.commit()
+        conn.close()
+    return token
+
+
+def consume_email_token(token, purpose):
+    """Verifie qu'un jeton est valide (bon usage prevu, non expire, non deja
+    utilise) et le marque comme consomme. Retourne le user_id si valide,
+    sinon None. Chaque jeton ne peut servir qu'une seule fois."""
+    with DB_LOCK:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT * FROM email_tokens WHERE token = ? AND purpose = ?",
+            (token, purpose)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return None
+        if row["used_at"] is not None:
+            conn.close()
+            return None
+        if datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.now():
+            conn.close()
+            return None
+        conn.execute(
+            "UPDATE email_tokens SET used_at = ? WHERE id = ?",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row["id"])
+        )
+        conn.commit()
+        conn.close()
+        return row["user_id"]
+
+
+def send_verification_email(user_id, email_addr):
+    token = create_email_token(user_id, "verify", hours_valid=48)
+    link = f"{APP_BASE_URL}/verify-email/{token}"
+    body = (
+        "Bonjour,\n\n"
+        "Merci de vous être inscrit sur FishGuard.\n"
+        "Confirmez votre adresse email en cliquant sur ce lien (valable 48h) :\n\n"
+        f"{link}\n\n"
+        "Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.\n\n"
+        "— L'équipe FishGuard"
+    )
+    return send_email(email_addr, "Confirmez votre adresse email — FishGuard", body)
+
+
+def send_password_reset_email(user_id, email_addr):
+    token = create_email_token(user_id, "reset", hours_valid=1)
+    link = f"{APP_BASE_URL}/reset-password/{token}"
+    body = (
+        "Bonjour,\n\n"
+        "Vous avez demandé à réinitialiser votre mot de passe FishGuard.\n"
+        "Ce lien est valable 1 heure :\n\n"
+        f"{link}\n\n"
+        "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — "
+        "votre mot de passe actuel reste inchangé.\n\n"
+        "— L'équipe FishGuard"
+    )
+    return send_email(email_addr, "Réinitialisation de votre mot de passe — FishGuard", body)
 
 
 # =============================================================================
@@ -186,6 +297,18 @@ def init_db():
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                purpose TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                created_at TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        """)
 
         # Migration douce : ajoute la colonne api_key si la base existait deja
         # sans elle (comptes crees avant ce systeme de cle API).
@@ -197,6 +320,11 @@ def init_db():
             for row in conn.execute("SELECT id FROM users").fetchall():
                 conn.execute("UPDATE users SET api_key = ? WHERE id = ?",
                              (secrets.token_hex(24), row["id"]))
+
+        # Migration douce : ajoute la colonne email_verified si la base
+        # existait deja sans elle (comptes crees avant ce systeme).
+        if "email_verified" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE")
 
         # Migration douce : ajoute la colonne user_id si la base existait deja
         # sans elle (installations anterieures a l'authentification).
@@ -468,7 +596,69 @@ def register_page():
     session["user_id"] = user_id
     session["user_email"] = email_addr
     session["user_name"] = display_name or email_addr.split("@")[0]
+
+    send_verification_email(user_id, email_addr)
     return redirect(url_for("dashboard"))
+
+
+@app.route("/verify-email/<token>")
+def verify_email(token):
+    user_id = consume_email_token(token, "verify")
+    if not user_id:
+        return render_template("login.html", error="Ce lien de vérification est invalide ou a expiré."), 400
+
+    with DB_LOCK:
+        conn = get_db()
+        conn.execute("UPDATE users SET email_verified = TRUE WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+    if session.get("user_id") == user_id:
+        return redirect(url_for("dashboard"))
+    return render_template("login.html", error=None, verified=True)
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password_page():
+    if request.method == "GET":
+        return render_template("forgot_password.html", sent=False, error=None)
+
+    email_addr = request.form.get("email", "").strip().lower()
+    with DB_LOCK:
+        conn = get_db()
+        row = conn.execute("SELECT id FROM users WHERE email = ?", (email_addr,)).fetchone()
+        conn.close()
+
+    # Toujours le meme message, que le compte existe ou non - evite de
+    # laisser deviner quels emails sont inscrits sur FishGuard.
+    if row:
+        send_password_reset_email(row["id"], email_addr)
+    return render_template("forgot_password.html", sent=True, error=None)
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password_page(token):
+    if request.method == "GET":
+        return render_template("reset_password.html", token=token, error=None)
+
+    password = request.form.get("password", "")
+    if len(password) < 6:
+        return render_template("reset_password.html", token=token,
+                                error="Le mot de passe doit faire au moins 6 caractères."), 400
+
+    user_id = consume_email_token(token, "reset")
+    if not user_id:
+        return render_template("login.html", error="Ce lien de réinitialisation est invalide ou a expiré."), 400
+
+    with DB_LOCK:
+        conn = get_db()
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                      (generate_password_hash(password), user_id))
+        conn.commit()
+        conn.close()
+
+    session.clear()
+    return render_template("login.html", error=None, password_reset=True)
 
 
 @app.route("/logout")
@@ -532,6 +722,61 @@ def regenerate_api_key():
         conn.commit()
         conn.close()
     return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/change-email", methods=["POST"])
+@login_required
+def change_email():
+    new_email = request.form.get("new_email", "").strip().lower()
+    password = request.form.get("current_password", "")
+
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+
+        if not check_password_hash(user["password_hash"], password):
+            conn.close()
+            return _settings_with_error("Mot de passe actuel incorrect.")
+
+        existing = conn.execute("SELECT id FROM users WHERE email = ? AND id != ?",
+                                 (new_email, session["user_id"])).fetchone()
+        if existing:
+            conn.close()
+            return _settings_with_error("Cet email est déjà utilisé par un autre compte.")
+
+        # Changer d'email invalide la verification precedente : la nouvelle
+        # adresse doit etre reconfirmee avant d'etre consideree fiable.
+        conn.execute("UPDATE users SET email = ?, email_verified = FALSE WHERE id = ?",
+                      (new_email, session["user_id"]))
+        conn.commit()
+        conn.close()
+
+    session["user_email"] = new_email
+    send_verification_email(session["user_id"], new_email)
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/resend-verification", methods=["POST"])
+@login_required
+def resend_verification():
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        conn.close()
+    if user and not user["email_verified"]:
+        send_verification_email(user["id"], user["email"])
+    return redirect(url_for("settings_page"))
+
+
+def _settings_with_error(message):
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        mailbox = conn.execute(
+            "SELECT * FROM mailbox_connections WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        conn.close()
+    return render_template("settings.html", user=user, mailbox=mailbox, error=message, saved=False), 400
 
 
 @app.route("/settings/mailbox", methods=["POST"])
