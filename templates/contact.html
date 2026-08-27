@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FishGuard — Détection automatique</title>
+<title>Nous contacter — FishGuard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -315,6 +315,35 @@
     .mobile-menu-btn{display:inline-flex;}
     .sidebar-overlay.open{display:block;}
   }
+
+
+  /* ---------- Page "Nous contacter" ---------- */
+  .contact-wrap{max-width:760px; margin:0 auto; padding:36px 40px 60px;}
+  .contact-grid{display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start;}
+  @media(max-width:720px){ .contact-grid{grid-template-columns:1fr;} .contact-wrap{padding:28px 20px 48px;} }
+  .contact-info-item{display:flex; align-items:flex-start; gap:12px; margin-bottom:18px;}
+  .contact-info-item:last-child{margin-bottom:0;}
+  .contact-info-item svg{width:18px; height:18px; flex:0 0 auto; color:var(--accent-2); margin-top:2px;}
+  .contact-info-item .label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); margin:0;}
+  .contact-info-item .value{font-size:13.5px; color:var(--text); margin-top:2px;}
+  .contact-info-item a{color:var(--accent-2); text-decoration:none; font-weight:600;}
+  .contact-info-item a:hover{text-decoration:underline;}
+  .mailto-btn{
+    display:inline-flex; align-items:center; gap:8px; margin-top:6px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    text-decoration:none; font-size:12.5px; font-weight:600; padding:9px 16px; border-radius:9px;
+    transition:border-color .15s ease, transform .12s ease;
+  }
+  .mailto-btn:hover{border-color:var(--accent); transform:translateY(-1px);}
+  .mailto-btn svg{width:15px; height:15px;}
+  .contact-success{
+    background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.4); color:var(--safe);
+    border-radius:9px; padding:14px; font-size:13.5px; line-height:1.6; margin-bottom:18px;
+  }
+  .contact-error{
+    background:rgba(255,84,112,0.12); border:1px solid rgba(255,84,112,0.4); color:var(--danger);
+    border-radius:9px; padding:10px 12px; font-size:13px; margin-bottom:18px;
+  }
 </style>
 </head>
 <body>
@@ -337,11 +366,11 @@
     </div>
 
     <div class="sidebar-section-label">Surveillance</div>
-    <a href="/" class="nav-link active">
+    <a href="/" class="nav-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
       <span class="nav-link-label">Dashboard</span>
     </a>
-    <a href="#analyticsSection" class="nav-link">
+    <a href="/#analyticsSection" class="nav-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="6"/><line x1="16" y1="20" x2="16" y2="14"/><line x1="22" y1="20" x2="22" y2="9"/></svg>
       <span class="nav-link-label">Statistiques</span>
     </a>
@@ -365,8 +394,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="nav-link-label">Paramètres</span>
     </a>
-    <a href="/contact" class="nav-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+    <a href="/contact" class="nav-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
       <span class="nav-link-label">Nous contacter</span>
     </a>
 
@@ -400,108 +429,78 @@
       <div class="sidebar-brand-text" style="font-size:14px;"><span class="word-fish">Fish</span><span class="word-guard">Guard</span></div>
     </div>
 
+    <div class="contact-wrap">
+      <h1 style="font-family:'Space Grotesk',sans-serif; font-size:22px; margin:0 0 4px;">Nous contacter</h1>
+      <div class="sub" style="margin-bottom:26px;">Une question, un bug à signaler, une suggestion ? L'équipe FishGuard vous répond directement.</div>
 
-<div class="stats-row" id="statsRow">
-  <div class="stat-card" style="--stat-glow: rgba(91,140,255,0.22)" title="Nombre total de messages passés dans le moteur de détection">
-    <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="12"/><line x1="10" y1="20" x2="10" y2="6"/><line x1="16" y1="20" x2="16" y2="14"/><line x1="22" y1="20" x2="22" y2="9"/></svg>
-    <div class="stat-value" id="statTotal">0</div>
-    <div class="stat-label">Messages analysés</div>
-  </div>
-  <div class="stat-card" style="--stat-glow: rgba(255,84,112,0.22)" title="Part des messages analysés classés PHISHING ou SUSPECT">
-    <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v9"/><circle cx="12" cy="2" r="1.6" fill="var(--danger)" stroke="none"/><path d="M12 11c0 3-3.5 3.5-4.2 1.2C7.3 10.2 9.5 9 11 10.2"/></svg>
-    <div class="stat-value" id="statThreatPct" style="color:var(--danger)">0%</div>
-    <div class="stat-label">Taux de menace</div>
-  </div>
-  <div class="stat-card" style="--stat-glow: rgba(255,180,84,0.22)" title="Expéditeurs déjà flaggés comme suspects plus d'une fois">
-    <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-    <div class="stat-value" id="statOffenders" style="color:var(--warn)">0</div>
-    <div class="stat-label">Expéditeurs récidivistes</div>
-  </div>
-  <div class="stat-card" style="--stat-glow: rgba(52,211,153,0.22)" title="Analyses corrigées manuellement, réinjectées pour améliorer le modèle">
-    <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8.5 12.2 11 14.7 15.5 9.3"/></svg>
-    <div class="stat-value" id="statCorrections" style="color:var(--accent)">0</div>
-    <div class="stat-label">Corrections apprises</div>
-  </div>
-</div>
+      {% if sent %}
+      <div class="contact-success">✓ Message envoyé — l'équipe FishGuard vous répondra directement à l'adresse indiquée.</div>
+      {% endif %}
+      {% if error %}
+      <div class="contact-error">{{ error }}</div>
+      {% endif %}
 
-<div class="analytics-row" id="analyticsSection">
-  <div class="analytics-panel">
-    <h3>Répartition des menaces</h3>
-    <div id="donutChart"><div class="analytics-empty">Pas encore de données</div></div>
-  </div>
-  <div class="analytics-panel">
-    <h3>Vecteurs d'attaque par canal</h3>
-    <div id="channelBars"><div class="analytics-empty">Pas encore de données</div></div>
-  </div>
-  <div class="analytics-panel">
-    <h3>Tendance — 14 derniers jours</h3>
-    <div id="timelineChart"><div class="analytics-empty">Pas encore de données</div></div>
-  </div>
-</div>
+      <div class="contact-grid">
+        <div class="panel">
+          <h2>Envoyer un message</h2>
+          <div class="desc">Décrivez votre demande, on y répond au plus vite.</div>
+          <form method="POST" action="/contact">
+            <label for="name">Nom</label>
+            <input type="text" id="name" name="name" value="{{ user_name or '' }}" placeholder="Votre nom">
 
-<div class="campaign-row" id="campaignRow" style="display:none;">
-  <div class="panel" style="padding:20px 24px;">
-    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 6.9 17.2"/><path d="M12 2a10 10 0 0 1 9.5 7"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/></svg> Threat Intelligence — Campagnes actives</h2>
-    <div class="desc">Domaines malveillants vus chez plusieurs expéditeurs différents ou sous plusieurs variantes typosquattées — signe d'une attaque coordonnée, pas d'un incident isolé.</div>
-    <div id="campaignList"></div>
-  </div>
-</div>
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required value="{{ user_email or '' }}" placeholder="vous@exemple.com">
 
-<main>
-  <div class="panel">
-    <h2>Simuler une réception</h2>
-    <div class="desc">Les emails sont analysés automatiquement dès réception (IMAP). Ce formulaire simule l'arrivée d'un SMS ou d'un autre canal — en production, il serait déclenché par une passerelle SMS (webhook).</div>
+            <label for="subject">Sujet</label>
+            <input type="text" id="subject" name="subject" placeholder="ex: Bug sur le Security Check-up">
 
-    <label>Canal</label>
-    <select id="channel">
-      <option value="sms">SMS</option>
-      <option value="email">Email (manuel)</option>
-      <option value="autre">Autre / réseau social</option>
-    </select>
+            <label for="message">Message</label>
+            <textarea id="message" name="message" required placeholder="Décrivez votre demande en détail..."></textarea>
 
-    <label>Expéditeur</label>
-    <input id="sender" placeholder="ex: +228 90 00 00 00 ou TMoney">
+            <button type="submit">Envoyer le message</button>
+          </form>
+        </div>
 
-    <label>Contenu du message</label>
-    <textarea id="text" placeholder="Collez ici le contenu du SMS ou message à analyser..."></textarea>
+        <div class="panel">
+          <h2>Autres façons de nous joindre</h2>
+          <div class="desc">L'équipe derrière FishGuard — projet JPOPE 2026.</div>
 
-    <button onclick="analyze()">Analyser maintenant</button>
-  </div>
+          <div class="contact-info-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+            <div>
+              <p class="label">Email direct</p>
+              <div class="value"><a href="mailto:{{ contact_email or 'contact@fishguard.me' }}">{{ contact_email or 'contact@fishguard.me' }}</a></div>
+              <a class="mailto-btn" href="mailto:{{ contact_email or 'contact@fishguard.me' }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+                Ouvrir dans ma messagerie
+              </a>
+            </div>
+          </div>
 
-  <div class="panel">
-    <h2>Flux en direct</h2>
-    <div class="desc">Chaque message analysé — automatiquement (email) ou manuellement (simulation) — apparaît ici avec son score et les raisons de la détection.</div>
+          <div class="contact-info-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
+            <div>
+              <p class="label">Projet</p>
+              <div class="value">FishGuard — JPOPE 2026, iP Net Institute of Technology (Lomé, Togo)</div>
+            </div>
+          </div>
 
-    <div class="feed-filters">
-      <select id="filterChannel" onchange="resetAndReload()">
-        <option value="">Tous les canaux</option>
-      </select>
-      <select id="filterLabel" onchange="resetAndReload()">
-        <option value="">Tous les niveaux de risque</option>
-        <option value="PHISHING">🔴 Phishing</option>
-        <option value="SUSPECT">🟠 Suspect</option>
-        <option value="LEGITIME">🟢 Légitime</option>
-      </select>
-      <input type="date" id="filterDate" onchange="resetAndReload()">
-      <button class="filter-clear" onclick="clearFilters()">Réinitialiser</button>
+          <div class="contact-info-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <div>
+              <p class="label">Équipe</p>
+              <div class="value">TOMETY Emmanuel Francis (backend) · TOUKA Lumen (Android &amp; extension) · DOSSOU Hannielle Samuella (UI/UX mobile)</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div id="feed"><div class="empty">En attente du premier message analysé…</div></div>
-    <button class="load-more" id="loadMoreBtn" onclick="loadMore()" style="display:none;">Voir plus</button>
-  </div>
-</main>
-
-<footer>FishGuard — on ne mord plus à l'hameçon</footer>
+    <footer>FishGuard — on ne mord plus à l'hameçon</footer>
   </div><!-- /content-area -->
 </div><!-- /app-shell -->
 
 <script>
-/* =========================================================
-   Garde de session : si le cookie de connexion expire pendant
-   l'usage du dashboard, toute requete /api/* qui repond 401
-   renvoie proprement vers /login au lieu de laisser l'appli
-   planter silencieusement sur du JSON inattendu.
-   ========================================================= */
 const _fetch = window.fetch;
 window.fetch = async function(...args){
   const res = await _fetch(...args);
@@ -511,10 +510,13 @@ window.fetch = async function(...args){
   return res;
 };
 
-/* =========================================================
-   Sidebar : repli desktop (persiste dans localStorage) +
-   panneau coulissant sur mobile.
-   ========================================================= */
+function toggleTheme(){
+  const root = document.documentElement;
+  const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  root.setAttribute('data-theme', next);
+  localStorage.setItem('fishguard-theme', next);
+}
+
 (function(){
   const sidebar = document.getElementById('sidebar');
   if(localStorage.getItem('fishguard-sidebar-collapsed') === '1'){
@@ -534,603 +536,6 @@ function closeMobileSidebar(){
   document.getElementById('sidebar').classList.remove('mobile-open');
   document.getElementById('sidebarOverlay').classList.remove('open');
 }
-
-/* =========================================================
-   Thème clair / sombre
-   ========================================================= */
-function toggleTheme(){
-  const root = document.documentElement;
-  const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-  root.setAttribute('data-theme', next);
-  localStorage.setItem('fishguard-theme', next);
-  window.dispatchEvent(new CustomEvent('fishguard-theme-changed', {detail: next}));
-}
-
-/* =========================================================
-   Fond animé : petits poissons qui nagent, attrapés au hasard
-   par un hameçon qui descend — clin d'œil discret au nom
-   et au logo, en arrière-plan pur (pointer-events désactivés,
-   n'interfère jamais avec l'usage du tableau de bord).
-   ========================================================= */
-(function(){
-  const canvas = document.getElementById('oceanBg');
-  const ctx = canvas.getContext('2d');
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  let W, H, DPR;
-  function resize(){
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = canvas.width = window.innerWidth * DPR;
-    H = canvas.height = window.innerHeight * DPR;
-    canvas.style.width = window.innerWidth + 'px';
-    canvas.style.height = window.innerHeight + 'px';
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  function isLight(){ return document.documentElement.getAttribute('data-theme') === 'light'; }
-  function fishColors(){
-    return isLight()
-      ? ['#3B6EFF', '#2696C9', '#5B8CFF', '#1E4FD9']   // plus saturé/sombre pour rester lisible sur fond clair
-      : ['#5B8CFF', '#4FD1FF', '#8AB4FF', '#3B6EFF'];
-  }
-  function hookColor(){ return isLight() ? '#B85A2E' : '#E8935A'; }
-
-  const FISH_COUNT = window.innerWidth < 720 ? 5 : 9;
-
-  function makeFish(){
-    const dir = Math.random() < 0.5 ? 1 : -1;
-    const colors = fishColors();
-    return {
-      x: Math.random() * window.innerWidth,
-      y: 60 + Math.random() * (window.innerHeight - 160),
-      size: 11 + Math.random() * 10,
-      speed: (0.18 + Math.random() * 0.28) * dir,
-      dir,
-      color: colors[Math.floor(Math.random()*colors.length)],
-      wob: Math.random() * Math.PI * 2,
-      opacity: (isLight() ? 0.14 : 0.20) + Math.random() * 0.12,
-      caught: false,
-    };
-  }
-
-  let fish = Array.from({length: FISH_COUNT}, makeFish);
-
-  // Recolore l'ensemble des poissons existants quand le theme change,
-  // sans interrompre l'animation en cours.
-  window.addEventListener('fishguard-theme-changed', () => {
-    const colors = fishColors();
-    fish.forEach(f => { f.color = colors[Math.floor(Math.random()*colors.length)]; });
-  });
-
-  // Hameçon : descend lentement, "attrape" un poisson proche, puis remonte.
-  let hook = null;
-  function spawnHook(){
-    const target = fish[Math.floor(Math.random()*fish.length)];
-    if(!target || target.caught) return;
-    hook = {
-      x: target.x,
-      y: -40,
-      state: 'down', // down -> catch -> up
-      targetY: target.y,
-      target,
-      t: 0,
-    };
-  }
-
-  function drawFish(f){
-    ctx.save();
-    ctx.translate(f.x, f.y + Math.sin(f.wob) * 4);
-    ctx.scale(f.dir, 1);
-    ctx.globalAlpha = f.opacity;
-    ctx.fillStyle = f.color;
-    // corps
-    ctx.beginPath();
-    ctx.ellipse(0, 0, f.size, f.size * 0.52, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // queue
-    ctx.beginPath();
-    ctx.moveTo(-f.size * 0.9, 0);
-    ctx.lineTo(-f.size * 1.5, -f.size * 0.5);
-    ctx.lineTo(-f.size * 1.5, f.size * 0.5);
-    ctx.closePath();
-    ctx.fill();
-    // nageoire dorsale (rappel du logo)
-    ctx.beginPath();
-    ctx.moveTo(-f.size * 0.05, -f.size * 0.45);
-    ctx.lineTo(f.size * 0.15, -f.size * 0.95);
-    ctx.lineTo(f.size * 0.35, -f.size * 0.4);
-    ctx.closePath();
-    ctx.fill();
-    // oeil
-    ctx.globalAlpha = f.opacity * 1.6;
-    ctx.beginPath();
-    ctx.arc(f.size * 0.45, -f.size * 0.08, f.size * 0.09, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawSplash(x, y, t){
-    const r = 4 + t * 1.8;
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, (isLight() ? 0.32 : 0.28) - t * 0.02);
-    ctx.strokeStyle = hookColor();
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawHook(h){
-    ctx.save();
-    // ligne de peche : un peu plus marquée pour qu'on suive bien sa trajectoire
-    ctx.globalAlpha = isLight() ? 0.42 : 0.38;
-    ctx.strokeStyle = hookColor();
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(h.x, 0);
-    ctx.lineTo(h.x, h.y);
-    ctx.stroke();
-    // hameçon : visible mais mesuré
-    ctx.globalAlpha = isLight() ? 0.45 : 0.5;
-    ctx.lineWidth = 2.1;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(h.x, h.y + 6, 6, 0.3, Math.PI * 1.35);
-    ctx.stroke();
-    // pointe (petit trait pour lire clairement la forme d'hameçon)
-    ctx.beginPath();
-    ctx.moveTo(h.x - 5.5, h.y + 3.5);
-    ctx.lineTo(h.x - 6.5, h.y - 0.5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Poisson accroché : suit desormais l'hamecon pendant qu'il remonte,
-  // au lieu de disparaitre instantanement. Se debat un peu (wiggle) et
-  // bascule progressivement à la verticale pour donner l'impression
-  // d'etre tiré hors de l'eau.
-  function drawCaughtFish(f, h){
-    const wiggle = Math.sin(h.t * 0.45) * (h.state === 'up' ? 5 : 9);
-    const tilt = h.state === 'up' ? Math.PI / 2.3 : Math.PI / 8;
-    ctx.save();
-    ctx.translate(h.x + wiggle, h.y + 9);
-    ctx.rotate(tilt * f.dir);
-    ctx.scale(f.dir, 1);
-    ctx.globalAlpha = Math.min(f.opacity * 1.6, 0.55);
-    ctx.fillStyle = f.color;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, f.size, f.size * 0.52, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-f.size * 0.9, 0);
-    ctx.lineTo(-f.size * 1.5, -f.size * 0.5);
-    ctx.lineTo(-f.size * 1.5, f.size * 0.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  let lastHookAttempt = 0;
-
-  function tick(ts){
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-
-    fish.forEach(f => {
-      if(f.caught) return;
-      f.x += f.speed;
-      f.wob += 0.02;
-      if(f.x < -30) f.x = window.innerWidth + 30;
-      if(f.x > window.innerWidth + 30) f.x = -30;
-      drawFish(f);
-    });
-
-    if(hook){
-      if(hook.state === 'down'){
-        hook.y += 1.8;
-        if(hook.y >= hook.targetY){
-          hook.state = 'catch';
-          hook.target.caught = true;
-          hook.t = 0;
-        }
-      } else if(hook.state === 'catch'){
-        hook.t += 1;
-        drawSplash(hook.x, hook.y, hook.t);
-        if(hook.t > 18){ hook.state = 'up'; }
-      } else if(hook.state === 'up'){
-        hook.y -= 2.4;
-        hook.t += 1;
-        if(hook.y <= -40){
-          const idx = fish.indexOf(hook.target);
-          if(idx !== -1) fish[idx] = makeFish();
-          hook = null;
-        }
-      }
-      if(hook){
-        if(hook.state === 'catch' || hook.state === 'up'){
-          drawCaughtFish(hook.target, hook);
-        }
-        drawHook(hook);
-      }
-    }
-
-    if(!prefersReducedMotion){
-      if(!hook && ts - lastHookAttempt > 4000 + Math.random()*3500){
-        lastHookAttempt = ts;
-        spawnHook();
-      }
-      requestAnimationFrame(tick);
-    }
-  }
-
-  if(!prefersReducedMotion){
-    requestAnimationFrame(tick);
-  } else {
-    // Etat statique respectueux de prefers-reduced-motion : un seul rendu, pas de boucle.
-    fish.forEach(drawFish);
-  }
-})();
-
-/* ========================================================= 
-   Logique du tableau de bord (inchangée)
-   ========================================================= */
-async function analyze(){
-  const text = document.getElementById('text').value;
-  const channel = document.getElementById('channel').value;
-  const sender = document.getElementById('sender').value || 'inconnu';
-  if(!text.trim()) return;
-  await fetch('/api/analyze', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text, channel, sender})
-  });
-  document.getElementById('text').value = '';
-  loadFeed();
-}
-
-function colorFor(label){
-  if(label === 'PHISHING') return 'var(--danger)';
-  if(label === 'SUSPECT') return 'var(--warn)';
-  return 'var(--safe)';
-}
-
-async function loadStats(){
-  const res = await fetch('/api/stats');
-  const s = await res.json();
-  document.getElementById('statTotal').innerText = s.total;
-  document.getElementById('statThreatPct').innerText = s.threat_pct + '%';
-  document.getElementById('statOffenders').innerText = s.repeat_offenders;
-  document.getElementById('statCorrections').innerText = s.corrections;
-}
-
-let loadedCount = 5;
-const PAGE_SIZE = 5;
-let lastFeedSnapshot = null;
-
-function currentFilters(){
-  return {
-    channel: document.getElementById('filterChannel').value,
-    date: document.getElementById('filterDate').value,
-    label: document.getElementById('filterLabel').value,
-  };
-}
-
-function resetAndReload(){
-  loadedCount = PAGE_SIZE;
-  loadFeed();
-}
-
-function clearFilters(){
-  document.getElementById('filterChannel').value = '';
-  document.getElementById('filterDate').value = '';
-  document.getElementById('filterLabel').value = '';
-  resetAndReload();
-}
-
-function loadMore(){
-  loadedCount += PAGE_SIZE;
-  loadFeed();
-}
-
-async function sendFeedback(id, label){
-  await fetch('/api/feedback', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id, label})
-  });
-  loadFeed();
-  loadStats();
-}
-
-async function loadFeed(){
-  const {channel, date, label} = currentFilters();
-  const params = new URLSearchParams({limit: loadedCount, offset: 0});
-  if(channel) params.set('channel', channel);
-  if(date) params.set('date', date);
-  if(label) params.set('label', label);
-
-  const res = await fetch(`/api/feed?${params.toString()}`);
-  const data = await res.json();
-  const feed = document.getElementById('feed');
-  const loadMoreBtn = document.getElementById('loadMoreBtn');
-
-  const channelSelect = document.getElementById('filterChannel');
-  if(channelSelect.dataset.filled !== 'true' && data.available_channels && data.available_channels.length){
-    data.available_channels.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c;
-      opt.textContent = c;
-      channelSelect.appendChild(opt);
-    });
-    channelSelect.dataset.filled = 'true';
-  }
-
-  if(data.items.length === 0){
-    feed.innerHTML = '<div class="empty">Aucun message pour ce filtre.</div>';
-    loadMoreBtn.style.display = 'none';
-    lastFeedSnapshot = null;
-    return;
-  }
-
-  // Evite de tout redessiner (et donc de refermer un message deja ouvert)
-  // si rien n'a change depuis le dernier rafraichissement automatique.
-  const snapshot = JSON.stringify(data.items);
-  if(snapshot === lastFeedSnapshot){
-    loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
-    return;
-  }
-  const openIds = new Set();
-  feed.querySelectorAll('details[open]').forEach(d => openIds.add(d.dataset.feedId));
-  lastFeedSnapshot = snapshot;
-
-  feed.innerHTML = data.items.map(it => `
-    <details class="feed-item" data-feed-id="${it.id}" ${openIds.has(String(it.id)) ? 'open' : ''}>
-      <summary class="feed-summary">
-        <svg class="feed-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
-        <span class="badge ${it.label}">${it.label} · ${(it.score*100).toFixed(0)}%</span>
-        <span class="feed-preview">${escapeHtml(it.text).slice(0,120)}</span>
-        <span class="meta">${it.channel.toUpperCase()} · ${it.timestamp}</span>
-      </summary>
-      <div class="feed-details">
-        <div class="feed-top">
-          <span class="meta">Expéditeur : ${escapeHtml(it.sender || 'inconnu')}</span>
-        </div>
-        <div class="feed-text">${escapeHtml(it.text).slice(0,300)}</div>
-        <div class="meter"><div class="meter-fill" style="width:${(it.score*100).toFixed(0)}%; background:${colorFor(it.label)}"></div></div>
-        <ul class="reasons">${it.reasons.map(r => `<li>• ${escapeHtml(r)}</li>`).join('')}</ul>
-        <div class="feed-actions">
-          ${it.corrected
-            ? `<span class="corrected-tag">✓ corrigé manuellement en ${it.label}</span>`
-            : `<button class="action-btn" onclick="sendFeedback(${it.id}, 'PHISHING')">Marquer PHISHING</button>
-               <button class="action-btn" onclick="sendFeedback(${it.id}, 'LEGITIME')">Marquer LÉGITIME</button>`
-          }
-        </div>
-      </div>
-    </details>
-  `).join('');
-
-  loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
-}
-
-function escapeHtml(s){
-  const d = document.createElement('div');
-  d.innerText = s;
-  return d.innerHTML;
-}
-
-function buildCampaignGraph(domains, senders){
-  const allNodes = [
-    ...domains.map(d => ({label: d, type: 'domain'})),
-    ...senders.map(s => ({label: s, type: 'sender'})),
-  ];
-  const maxShow = 9;
-  const shown = allNodes.slice(0, maxShow);
-  const extra = allNodes.length - shown.length;
-
-  const cx = 200, cy = 120, radius = 85;
-  const n = Math.max(shown.length, 1);
-  let svgLines = '';
-  let svgNodes = '';
-
-  shown.forEach((node, i) => {
-    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-    const x = cx + radius * Math.cos(angle);
-    const y = cy + radius * Math.sin(angle);
-    const color = node.type === 'domain' ? 'var(--danger)' : 'var(--accent)';
-    const label = node.label.length > 16 ? node.label.slice(0, 14) + '…' : node.label;
-
-    svgLines += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)" stroke-width="1.5"/>`;
-    svgNodes += `
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" style="fill:${color}" />
-      <text x="${x.toFixed(1)}" y="${(y + 20).toFixed(1)}" text-anchor="middle" font-size="8.5" style="fill:var(--muted)" font-family="'IBM Plex Mono', monospace">${escapeHtml(label)}</text>
-    `;
-  });
-
-  return `
-    <svg viewBox="0 0 400 250" style="width:100%; max-width:420px; height:auto; display:block; margin:12px auto 0;">
-      ${svgLines}
-      <circle cx="${cx}" cy="${cy}" r="17" style="fill:var(--panel-2); stroke:var(--danger)" stroke-width="2"/>
-      <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="14">🎯</text>
-      ${svgNodes}
-      ${extra > 0 ? `<text x="${cx}" y="${cy + radius + 38}" text-anchor="middle" font-size="9" style="fill:var(--muted-dim)">+${extra} autre(s) non affiché(s)</text>` : ''}
-    </svg>
-    <div style="text-align:center; font-size:10px; color:var(--muted-dim); margin-top:8px;">
-      <span style="color:var(--danger);">●</span> domaine&nbsp;&nbsp;
-      <span style="color:var(--accent);">●</span> expéditeur
-    </div>
-  `;
-}
-
-let lastCampaignsSnapshot = null;
-
-async function loadCampaigns(){
-  const res = await fetch('/api/campaigns');
-  const campaigns = await res.json();
-  const row = document.getElementById('campaignRow');
-  const list = document.getElementById('campaignList');
-  if(campaigns.length === 0){
-    row.style.display = 'none';
-    lastCampaignsSnapshot = null;
-    return;
-  }
-  row.style.display = 'block';
-
-  // Evite de redessiner (et donc de fermer les graphes ouverts) si rien n'a change
-  // depuis le dernier rafraichissement automatique.
-  const snapshot = JSON.stringify(campaigns);
-  if(snapshot === lastCampaignsSnapshot){
-    return;
-  }
-
-  // Memorise quels graphes etaient ouverts avant de redessiner, pour les rouvrir ensuite.
-  const openDomains = new Set();
-  list.querySelectorAll('details[open]').forEach(d => openDomains.add(d.dataset.campaignKey));
-  lastCampaignsSnapshot = snapshot;
-
-  list.innerHTML = campaigns.map(c => `
-    <div class="campaign-card" style="display:block;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-        <div>
-          <span class="campaign-domain">${escapeHtml(c.domain)}</span>
-          ${c.variant_cluster ? '<span class="campaign-tag">variantes typosquat</span>' : ''}
-        </div>
-        <div class="campaign-meta">
-          <span>${c.sender_count} expéditeur(s)</span>
-          <span>${c.occurrences} occurrence(s)</span>
-          <span>${c.first_seen} → ${c.last_seen}</span>
-        </div>
-      </div>
-      <details style="margin-top:10px;" data-campaign-key="${escapeHtml(c.domain)}" ${openDomains.has(c.domain) ? 'open' : ''}>
-        <summary style="cursor:pointer; font-size:11.5px; color:var(--accent); user-select:none;">Voir le graphe de la campagne</summary>
-        ${buildCampaignGraph(c.domains || [], c.senders || [])}
-      </details>
-    </div>
-  `).join('');
-}
-
-/* ---------------------------------------------------------
-   Analytics : donut (repartition), barres (canaux), tendance
-   --------------------------------------------------------- */
-function renderDonut(byLabel){
-  const total = byLabel.PHISHING + byLabel.SUSPECT + byLabel.LEGITIME;
-  const el = document.getElementById('donutChart');
-  if(total === 0){
-    el.innerHTML = '<div class="analytics-empty">Pas encore de données</div>';
-    return;
-  }
-  const segs = [
-    {key:'PHISHING', var:'--danger', val:byLabel.PHISHING},
-    {key:'SUSPECT', var:'--warn', val:byLabel.SUSPECT},
-    {key:'LEGITIME', var:'--safe', val:byLabel.LEGITIME},
-  ];
-  const R = 46, CIRC = 2*Math.PI*R;
-  let offset = 0;
-  const arcs = segs.filter(s => s.val > 0).map(s => {
-    const frac = s.val/total;
-    const dash = Math.max(frac*CIRC, frac>0 ? 1.5 : 0);
-    const arc = `<circle cx="60" cy="60" r="${R}" fill="none" style="stroke:var(${s.var})" stroke-width="14"
-      stroke-dasharray="${dash} ${CIRC-dash}" stroke-dashoffset="${(-offset).toFixed(2)}"
-      stroke-linecap="butt" transform="rotate(-90 60 60)"/>`;
-    offset += dash;
-    return arc;
-  }).join('');
-
-  const legend = segs.map(s => `
-    <div class="legend-item">
-      <span class="legend-dot" style="background:var(${s.var})"></span>
-      <span>${s.key}</span>
-      <span class="legend-val">${s.val} · ${total ? Math.round(s.val/total*100) : 0}%</span>
-    </div>
-  `).join('');
-
-  el.innerHTML = `
-    <div class="donut-wrap">
-      <svg width="120" height="120" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--line)" stroke-width="14"/>
-        ${arcs}
-        <text x="60" y="57" text-anchor="middle" class="donut-center-label">${total}</text>
-        <text x="60" y="71" text-anchor="middle" class="donut-center-sub">ANALYSÉS</text>
-      </svg>
-      <div class="legend">${legend}</div>
-    </div>
-  `;
-}
-
-function renderChannelBars(byChannel){
-  const el = document.getElementById('channelBars');
-  if(!byChannel || byChannel.length === 0){
-    el.innerHTML = '<div class="analytics-empty">Pas encore de données</div>';
-    return;
-  }
-  el.innerHTML = byChannel.map(c => {
-    const color = c.threat_pct >= 50 ? 'var(--danger)' : c.threat_pct >= 20 ? 'var(--warn)' : 'var(--safe)';
-    return `
-      <div class="channel-bar-row">
-        <div class="channel-bar-top">
-          <span class="channel-bar-name">${escapeHtml(c.channel)}</span>
-          <span class="channel-bar-meta">${c.threat_pct}% · ${c.total} msg</span>
-        </div>
-        <div class="channel-bar-track">
-          <div class="channel-bar-fill" style="width:${Math.max(c.threat_pct, 2)}%; background:${color}"></div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function renderTimeline(timeline){
-  const el = document.getElementById('timelineChart');
-  const total = (timeline || []).reduce((a,t) => a + t.count, 0);
-  if(!timeline || timeline.length === 0 || total === 0){
-    el.innerHTML = '<div class="analytics-empty">Pas encore de données</div>';
-    return;
-  }
-  const W = 300, H = 110, PAD = 8;
-  const max = Math.max(...timeline.map(t => t.count), 1);
-  const stepX = timeline.length > 1 ? (W - 2*PAD) / (timeline.length - 1) : 0;
-  const pts = timeline.map((t,i) => {
-    const x = PAD + i*stepX;
-    const y = H - PAD - (t.count/max) * (H - 2*PAD);
-    return [Number(x.toFixed(1)), Number(y.toFixed(1))];
-  });
-  const line = pts.map(p => p.join(',')).join(' ');
-  const area = `${PAD},${H-PAD} ${line} ${pts[pts.length-1][0]},${H-PAD}`;
-  const dots = pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" style="fill:var(--accent-2)"/>`).join('');
-  const firstLabel = timeline[0].date.slice(5);
-  const lastLabel = timeline[timeline.length-1].date.slice(5);
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H+18}" style="width:100%; height:auto; display:block;">
-      <defs>
-        <linearGradient id="tlGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" style="stop-color:var(--accent); stop-opacity:0.45"/>
-          <stop offset="100%" style="stop-color:var(--accent); stop-opacity:0"/>
-        </linearGradient>
-      </defs>
-      <polygon points="${area}" fill="url(#tlGrad)"/>
-      <polyline points="${line}" fill="none" style="stroke:var(--accent-2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      ${dots}
-      <text x="${PAD}" y="${H+14}" font-size="9" style="fill:var(--muted-dim)" font-family="'IBM Plex Mono',monospace">${firstLabel}</text>
-      <text x="${W-PAD}" y="${H+14}" text-anchor="end" font-size="9" style="fill:var(--muted-dim)" font-family="'IBM Plex Mono',monospace">${lastLabel}</text>
-    </svg>
-  `;
-}
-
-async function loadAnalytics(){
-  const res = await fetch('/api/analytics');
-  const data = await res.json();
-  renderDonut(data.by_label);
-  renderChannelBars(data.by_channel);
-  renderTimeline(data.timeline);
-}
-
-loadFeed();
-loadStats();
-loadCampaigns();
-loadAnalytics();
-setInterval(() => { loadFeed(); loadStats(); loadCampaigns(); loadAnalytics(); }, 4000);
 </script>
 
 </body>

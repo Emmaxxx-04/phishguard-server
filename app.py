@@ -175,6 +175,35 @@ def send_password_reset_email(user_id, email_addr):
         return False
 
 
+def send_contact_message(name, from_email, subject, message_body):
+    """Envoie un message du formulaire "Nous contacter" a l'adresse de
+    l'equipe (SMTP_USER), avec Reply-To positionne sur l'adresse de la
+    personne pour pouvoir lui repondre directement depuis n'importe quelle
+    messagerie. Toujours appele dans un thread separe (voir route /contact) -
+    ne doit jamais bloquer la requete HTTP le temps que le SMTP reponde."""
+    if not (SMTP_USER and SMTP_PASSWORD):
+        print("[EMAIL] SMTP_USER/SMTP_PASSWORD non configures - message de contact non envoye.")
+        return False
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        body = f"De : {name} <{from_email}>\n\n{message_body}"
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = f"[FishGuard - Nous contacter] {subject}"
+        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+        msg["To"] = SMTP_USER
+        msg["Reply-To"] = from_email
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, [SMTP_USER], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[EMAIL] Echec d'envoi du message de contact de {from_email}: {e}")
+        return False
+
+
 # =============================================================================
 # Couche base de donnees : Postgres (Neon), avec une petite compatibilite qui
 # garde la meme facon d'ecrire le code partout ailleurs dans ce fichier
@@ -897,6 +926,49 @@ def security_checkup_page():
 @app.route("/check-qr")
 def check_qr_page():
     return render_template("check_qr.html")
+
+
+@app.route("/contact", methods=["GET", "POST"])
+@login_required
+def contact_page():
+    contact_email = os.getenv("SMTP_USER") or "contact@fishguard.me"
+
+    if request.method == "GET":
+        return render_template(
+            "contact.html",
+            user_name=session.get("user_name"),
+            user_email=session.get("user_email"),
+            contact_email=contact_email,
+            sent=False, error=None,
+        )
+
+    name = request.form.get("name", "").strip() or session.get("user_name") or "Utilisateur FishGuard"
+    from_email = request.form.get("email", "").strip() or session.get("user_email")
+    subject = request.form.get("subject", "").strip() or "(sans objet)"
+    message_body = request.form.get("message", "").strip()
+
+    if not from_email or not message_body:
+        return render_template(
+            "contact.html",
+            user_name=session.get("user_name"),
+            user_email=session.get("user_email"),
+            contact_email=contact_email,
+            sent=False, error="Email et message sont requis.",
+        ), 400
+
+    threading.Thread(
+        target=send_contact_message,
+        args=(name, from_email, subject, message_body),
+        daemon=True,
+    ).start()
+
+    return render_template(
+        "contact.html",
+        user_name=session.get("user_name"),
+        user_email=from_email,
+        contact_email=contact_email,
+        sent=True, error=None,
+    )
 
 
 @app.route("/api/threat-intel", methods=["POST"])
