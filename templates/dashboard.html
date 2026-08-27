@@ -86,7 +86,27 @@
   .nav-btn:active{transform:translateY(0);}
   .nav-btn svg{width:15px; height:15px; flex:0 0 auto;}
   .nav-btn-icon{padding:9px; width:36px; justify-content:center;}
-  .nav-btn-user{background:var(--panel); border-color:var(--accent); color:var(--accent-2); font-weight:600; align-self:flex-start; margin-top:-16px;}
+
+  /* ---------- Identite utilisateur : avatar (initiale) + nom, separe de
+     l'action de deconnexion - remplace l'ancien bouton unique qui melangeait
+     les deux et flottait mal (align-self:flex-start + margin-top negatif). */
+  .user-pill{
+    display:inline-flex; align-items:center; gap:9px;
+    background:var(--panel); border:1px solid var(--line);
+    padding:6px 14px 6px 6px; border-radius:999px;
+    text-decoration:none; color:var(--text);
+    transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+  }
+  .user-pill:hover{border-color:var(--accent); transform:translateY(-1px); box-shadow:0 6px 18px rgba(91,140,255,0.18);}
+  .user-avatar{
+    width:26px; height:26px; border-radius:50%; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#07101F; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:12px;
+  }
+  .user-name{font-size:12.5px; font-weight:600; white-space:nowrap;}
+  .nav-btn-logout{padding:9px; width:36px; justify-content:center; color:var(--muted);}
+  .nav-btn-logout:hover{color:var(--danger); border-color:var(--danger); box-shadow:0 6px 18px rgba(255,84,112,0.18);}
 
   .theme-toggle{
     position:fixed; top:20px; right:24px; z-index:50;
@@ -261,12 +281,12 @@
       Security Check-up
     </a>
     <span class="nav-sep"></span>
-    <a href="/settings" class="nav-btn nav-btn-icon" title="Réglages du compte" aria-label="Réglages">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <a href="/settings" class="user-pill" title="Réglages du compte">
+      <span class="user-avatar">{{ (user_name or "?")[0] | upper }}</span>
+      <span class="user-name">{{ user_name or "Mon compte" }}</span>
     </a>
-    <a href="/logout" class="nav-btn nav-btn-user" title="Se déconnecter">
+    <a href="/logout" class="nav-btn nav-btn-icon nav-btn-logout" title="Se déconnecter" aria-label="Se déconnecter">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      {{ user_name or "Déconnexion" }}
     </a>
   </div>
 </header>
