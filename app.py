@@ -5,6 +5,7 @@ Lancement: python3 app.py
 import os
 import re
 import threading
+import contextlib
 import time
 import secrets
 import base64
@@ -207,7 +208,18 @@ if not DATABASE_URL:
         "postgresql://utilisateur:motdepasse@hote/nom_base"
     )
 
-DB_LOCK = threading.Lock()
+# DB_LOCK etait un verrou global datant de l'epoque SQLite (fichier local,
+# un seul ecrivain a la fois). Sur Postgres/Neon ce n'est plus necessaire -
+# chaque get_db() ouvre sa propre connexion et Postgres gere nativement la
+# concurrence. Le garder causait un bug grave : si UNE connexion (ex: le
+# thread de polling IMAP en arriere-plan) mettait du temps a s'etablir
+# (reveil de la base apres suspension, reseau lent...), TOUTE l'application
+# se gelait derriere ce verrou unique - inscription/connexion incluses -
+# jusqu'a ce que Gunicorn tue le worker apres son timeout (120s).
+# Remplace par un verrou "no-op" : le code garde la meme structure
+# "with DB_LOCK:" partout (zero risque de casser l'indentation), mais
+# n'attend plus jamais rien.
+DB_LOCK = contextlib.nullcontext()
 
 
 class _CursorResult:
@@ -267,7 +279,11 @@ class _FakeFetchedCursor:
 
 
 def get_db():
-    pg_conn = psycopg2.connect(DATABASE_URL)
+    # connect_timeout : evite qu'une base lente a repondre (reveil apres
+    # suspension, souci reseau) ne bloque indefiniment l'appelant - au bout
+    # de 10s, on echoue proprement (exception geree plus haut) plutot que
+    # de risquer un blocage de plusieurs minutes.
+    pg_conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
     return PGConnection(pg_conn)
 
 
