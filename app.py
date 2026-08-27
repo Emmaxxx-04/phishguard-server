@@ -184,6 +184,22 @@ def send_password_reset_email(user_id, email_addr):
 # (Neon, gratuit et persistant) regle definitivement ce probleme.
 # =============================================================================
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# --- DIAGNOSTIC TEMPORAIRE : affiche l'hote/base reellement utilises au ---
+# --- demarrage, sans jamais logger le mot de passe. A retirer une fois ---
+# --- le probleme de perte de donnees resolu. ---
+if DATABASE_URL:
+    try:
+        _no_scheme = DATABASE_URL.split("://", 1)[1]
+        _creds_and_rest = _no_scheme.split("@", 1)
+        _user_part = _creds_and_rest[0].split(":")[0]
+        _host_and_db = _creds_and_rest[1] if len(_creds_and_rest) > 1 else "?"
+        print(f"[DB DIAGNOSTIC] Connexion utilisee -> user={_user_part} host_db={_host_and_db}", flush=True)
+    except Exception as _e:
+        print(f"[DB DIAGNOSTIC] Impossible de parser DATABASE_URL pour le diagnostic: {_e}", flush=True)
+else:
+    print("[DB DIAGNOSTIC] DATABASE_URL est VIDE/absente au demarrage !", flush=True)
+
 if not DATABASE_URL:
     raise RuntimeError(
         "DATABASE_URL manquante. Definis cette variable d'environnement avec "
@@ -551,7 +567,9 @@ def login_page():
     with DB_LOCK:
         conn = get_db()
         row = conn.execute("SELECT * FROM users WHERE email = ?", (email_addr,)).fetchone()
+        total_users = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         conn.close()
+    print(f"[DB DIAGNOSTIC] [PID {os.getpid()}] Login tente email={email_addr} -> trouve={bool(row)} total_users_actuellement={total_users}", flush=True)
 
     if not row or not check_password_hash(row["password_hash"], password):
         return render_template("login.html", error="Email ou mot de passe incorrect."), 401
@@ -582,6 +600,7 @@ def register_page():
         with DB_LOCK:
             conn = get_db()
             existing = conn.execute("SELECT id FROM users WHERE email = ?", (email_addr,)).fetchone()
+            print(f"[DB DIAGNOSTIC] [PID {os.getpid()}] Verification email={email_addr} -> existing={bool(existing)}", flush=True)
             if existing:
                 conn.close()
                 return render_template("register.html", error="Un compte existe deja avec cet email."), 400
@@ -604,6 +623,7 @@ def register_page():
                 conn.execute("UPDATE analyses SET user_id = ? WHERE user_id IS NULL", (user_id,))
 
             conn.commit()
+            print(f"[DB DIAGNOSTIC] [PID {os.getpid()}] Compte cree id={user_id} email={email_addr} - commit effectue.", flush=True)
             conn.close()
     except Exception as e:
         print(f"[REGISTER] Echec de creation de compte pour {email_addr}: {e}")
