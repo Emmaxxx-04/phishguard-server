@@ -317,6 +317,26 @@
     .mobile-menu-btn{display:inline-flex;}
     .sidebar-overlay.open{display:block;}
   }
+
+  /* ---------- En-tete de bienvenue du dashboard : logo + salutation
+     personnalisee + statut du moteur, en haut du contenu (remplace
+     l'ancien statut qui etait dans la sidebar). ---------- */
+  .page-header{
+    max-width:1200px; margin:0 auto; padding:30px 40px 6px;
+    display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  }
+  .page-header-brand{display:flex; align-items:center; gap:16px; min-width:0;}
+  .page-logo{height:54px; width:auto; flex:0 0 auto; filter:drop-shadow(0 4px 14px rgba(91,140,255,0.35));}
+  .welcome-title{font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700; margin:0; letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .welcome-name{background:linear-gradient(135deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .welcome-sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
+  .status-pill-header{
+    display:inline-flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    color:var(--muted); background:var(--panel-2); border:1px solid var(--line); padding:8px 14px; border-radius:20px;
+    white-space:nowrap; flex:0 0 auto;
+  }
+  @media(max-width:860px){ .page-header{padding:22px 20px 4px;} .page-logo{height:42px;} .welcome-title{font-size:18px;} }
+  @media(max-width:520px){ .page-header{flex-direction:column; align-items:flex-start;} }
 </style>
 </head>
 <body>
@@ -374,10 +394,6 @@
 
     <div class="sidebar-spacer"></div>
 
-    <div class="sidebar-status">
-      <span class="dot"></span> <span>MOTEUR ACTIF</span>
-    </div>
-
     <div class="sidebar-bottom">
       <a href="/settings" class="user-pill" title="Réglages du compte" style="flex:1 1 auto; min-width:0;">
         <span class="user-avatar">{{ (user_name or "?")[0] | upper }}</span>
@@ -402,6 +418,18 @@
       <div class="sidebar-brand-text" style="font-size:14px;"><span class="word-fish">Fish</span><span class="word-guard">Guard</span></div>
     </div>
 
+    <div class="page-header">
+      <div class="page-header-brand">
+        <img class="page-logo" src="/static/img/logo.png" alt="FishGuard">
+        <div>
+          <h1 class="welcome-title">Bienvenue, <span class="welcome-name">{{ user_name or "vous" }}</span></h1>
+          <div class="welcome-sub">Voici l'activité de sécurité surveillée sur votre compte.</div>
+        </div>
+      </div>
+      <div class="status-pill-header">
+        <span class="dot"></span> MOTEUR ACTIF — surveillance en temps réel
+      </div>
+    </div>
 
 <div class="stats-row" id="statsRow">
   <div class="stat-card" style="--stat-glow: rgba(91,140,255,0.22)" title="Nombre total de messages passés dans le moteur de détection">
