@@ -793,7 +793,8 @@ def settings_page():
             "SELECT * FROM mailbox_connections WHERE user_id = ?", (session["user_id"],)
         ).fetchone()
         conn.close()
-    return render_template("settings.html", user=user, mailbox=mailbox, error=None, saved=False)
+    return render_template("settings.html", user=user, mailbox=mailbox, error=None, saved=False,
+                            user_name=session.get("user_name"))
 
 
 @app.route("/settings/regenerate-key", methods=["POST"])
@@ -860,7 +861,8 @@ def _settings_with_error(message):
             "SELECT * FROM mailbox_connections WHERE user_id = ?", (session["user_id"],)
         ).fetchone()
         conn.close()
-    return render_template("settings.html", user=user, mailbox=mailbox, error=message, saved=False), 400
+    return render_template("settings.html", user=user, mailbox=mailbox, error=message, saved=False,
+                            user_name=session.get("user_name")), 400
 
 
 @app.route("/settings/mailbox", methods=["POST"])
@@ -877,7 +879,8 @@ def connect_mailbox():
             user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
             conn.close()
         return render_template("settings.html", user=user, mailbox=None,
-                                error="Hote, email et mot de passe requis.", saved=False), 400
+                                error="Hote, email et mot de passe requis.", saved=False,
+                                user_name=session.get("user_name")), 400
 
     with DB_LOCK:
         conn = get_db()
