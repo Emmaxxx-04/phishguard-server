@@ -1405,7 +1405,11 @@ def api_analyze():
     if not text.strip():
         return jsonify({"error": "texte vide"}), 400
 
-    result = analyzer.analyze(text, channel=channel)
+    # web-link (garde de liens universelle) et url-check (verificateur manuel)
+    # envoient un LIEN BRUT, pas un message - voir analyzer.analyze() pour le detail.
+    url_only = channel in ("web-link", "url-check")
+
+    result = analyzer.analyze(text, channel=channel, url_only=url_only)
     result["sender"] = sender
     result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

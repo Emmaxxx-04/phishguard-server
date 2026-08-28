@@ -149,29 +149,45 @@ class PhishingAnalyzer:
                 break
         return top_terms
 
-    def analyze(self, text: str, channel: str = "email"):
-        rule_score, reasons = rule_based_score(text)
-
-        url_score, url_reasons, domains = analyze_urls(text)
-        rule_score = min(rule_score + url_score, 1.0)
-        reasons.extend(url_reasons)
-
-        ml_score = None
-        if self.model is not None:
-            X = self.vectorizer.transform([text])
-            proba = self.model.predict_proba(X)[0]
-            ml_score = float(proba[1])
-
-        if ml_score is not None:
-            final_score = 0.5 * rule_score + 0.5 * ml_score
-            if ml_score >= 0.45:
-                top_words = self._top_contributing_words(text)
-                if top_words:
-                    reasons.append(f"Modele ML — mots les plus suspects: {', '.join(top_words)} (score: {ml_score:.2f})")
-                else:
-                    reasons.append(f"Score du modele ML (TF-IDF): {ml_score:.2f}")
+    def analyze(self, text: str, channel: str = "email", url_only: bool = False):
+        """url_only=True : le texte fourni est un LIEN BRUT (pas un message),
+        par exemple verifie via /check-url ou intercepte au clic par
+        l'extension (global-guard.js). Dans ce cas, on n'applique ni les
+        regles textuelles (urgence, demande de mot de passe, etc. - concues
+        pour un message, pas une URL) ni le modele ML (entraine sur des
+        corps de message, pas des chaines d'URL) : une URL de moteur de
+        recherche/redirection peut contenir des mots comme "connexion" dans
+        ses parametres sans etre suspecte pour autant. Seule l'analyse
+        forensique du domaine lui-meme (typosquatting, TLD a risque, IP
+        litterale...) s'applique."""
+        if url_only:
+            url_score, url_reasons, domains = analyze_urls(text)
+            final_score = url_score
+            reasons = list(url_reasons)
+            ml_score = None
         else:
-            final_score = rule_score
+            rule_score, reasons = rule_based_score(text)
+
+            url_score, url_reasons, domains = analyze_urls(text)
+            rule_score = min(rule_score + url_score, 1.0)
+            reasons.extend(url_reasons)
+
+            ml_score = None
+            if self.model is not None:
+                X = self.vectorizer.transform([text])
+                proba = self.model.predict_proba(X)[0]
+                ml_score = float(proba[1])
+
+            if ml_score is not None:
+                final_score = 0.5 * rule_score + 0.5 * ml_score
+                if ml_score >= 0.45:
+                    top_words = self._top_contributing_words(text)
+                    if top_words:
+                        reasons.append(f"Modele ML — mots les plus suspects: {', '.join(top_words)} (score: {ml_score:.2f})")
+                    else:
+                        reasons.append(f"Score du modele ML (TF-IDF): {ml_score:.2f}")
+            else:
+                final_score = rule_score
 
         if final_score >= 0.55:
             label = "PHISHING"
