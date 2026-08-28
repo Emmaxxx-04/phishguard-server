@@ -994,17 +994,17 @@ def disconnect_mailbox():
 
 @app.route("/check-url")
 def check_url_page():
-    return render_template("check_url.html")
+    return render_template("check_url.html", user_name=session.get("user_name"))
 
 
 @app.route("/security-checkup")
 def security_checkup_page():
-    return render_template("security_checkup.html")
+    return render_template("security_checkup.html", user_name=session.get("user_name"))
 
 
 @app.route("/check-qr")
 def check_qr_page():
-    return render_template("check_qr.html")
+    return render_template("check_qr.html", user_name=session.get("user_name"))
 
 
 @app.route("/contact", methods=["GET", "POST"])
