@@ -25,7 +25,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet, InvalidToken
 
 from analyzer import PhishingAnalyzer
-from urlintel import analyze_urls
+from urlintel import analyze_urls, is_allowlisted_domain
 from threat_intel import check_virustotal, check_urlscan
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -543,6 +543,13 @@ def save_analysis(result, user_id=None):
 
         if is_threat:
             for domain in result.get("domains", []):
+                # Un message frauduleux peut mentionner/imiter un domaine
+                # legitime (ex: "gmail.com", "netflix.com") sans que ce
+                # domaine soit lui-meme le lien piege - on ne l'ajoute donc
+                # jamais aux campagnes partagees, pour eviter de flagger a
+                # tort de grandes plateformes connues.
+                if is_allowlisted_domain(domain):
+                    continue
                 conn.execute(
                     "INSERT INTO domain_sightings (domain, sender, analysis_id, timestamp) VALUES (?, ?, ?, ?)",
                     (domain, sender, analysis_id, result["timestamp"])
@@ -1363,6 +1370,8 @@ def api_feedback():
             ).fetchone()
             if not already_linked:
                 for domain in analyze_urls(analysis["text"])[2]:
+                    if is_allowlisted_domain(domain):
+                        continue
                     conn.execute(
                         "INSERT INTO domain_sightings (domain, sender, analysis_id, timestamp) VALUES (?, ?, ?, ?)",
                         (domain, sender, analysis_id, analysis["timestamp"])
