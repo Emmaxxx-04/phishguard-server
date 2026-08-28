@@ -866,6 +866,24 @@ def admin_users():
     return render_template("admin_users.html", users=users)
 
 
+@app.route("/api/my-key")
+@login_required
+def api_my_key():
+    """Permet a l'extension (ou l'app mobile) de recuperer automatiquement
+    la cle API de l'utilisateur DEJA CONNECTE dans son navigateur sur
+    fishguard.me, via le cookie de session - evite le copier-coller manuel
+    depuis la page Reglages lors de la premiere configuration. Protege par
+    @login_required : ne fonctionne que si un vrai cookie de session valide
+    est envoye (jamais accessible a un tiers non authentifie)."""
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT api_key, display_name FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        conn.close()
+    if not user:
+        return jsonify({"error": "utilisateur introuvable"}), 404
+    return jsonify({"api_key": user["api_key"], "user_name": user["display_name"]})
+
+
 @app.route("/settings")
 @login_required
 def settings_page():
