@@ -65,12 +65,21 @@ SMTP_FROM_NAME = "FishGuard"
 APP_BASE_URL = os.getenv("APP_BASE_URL", "https://fishguard.me")
 
 
+_LAST_EMAIL_ATTEMPT = {"note": "aucune tentative recue depuis le dernier redemarrage du serveur"}
+
+
 def send_email(to_addr, subject, body_text):
     """Envoie un email simple en texte brut. Retourne True si l'envoi a
     reussi, False sinon (jamais d'exception qui remonterait jusqu'a
     l'utilisateur - une panne d'envoi ne doit pas casser le reste du site)."""
+    global _LAST_EMAIL_ATTEMPT
     if not (SMTP_USER and SMTP_PASSWORD):
         print("[EMAIL] SMTP_USER/SMTP_PASSWORD non configures - email non envoye.")
+        _LAST_EMAIL_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "destinataire": to_addr,
+            "resultat": "ECHEC - SMTP_USER/SMTP_PASSWORD non configures sur ce service",
+        }
         return False
     try:
         import smtplib
@@ -84,10 +93,32 @@ def send_email(to_addr, subject, body_text):
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_USER, [to_addr], msg.as_string())
+        _LAST_EMAIL_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "destinataire": to_addr,
+            "smtp_user_utilise": SMTP_USER,
+            "smtp_host": SMTP_HOST,
+            "resultat": "SUCCES - email envoye sans erreur",
+        }
         return True
     except Exception as e:
         print(f"[EMAIL] Echec d'envoi vers {to_addr}: {e}")
+        _LAST_EMAIL_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "destinataire": to_addr,
+            "smtp_user_utilise": SMTP_USER,
+            "smtp_host": SMTP_HOST,
+            "resultat": f"ECHEC - {type(e).__name__}: {e}",
+        }
         return False
+
+
+@app.route("/debug/last-email")
+def debug_last_email():
+    """Page de diagnostic temporaire : affiche la derniere tentative d'envoi
+    d'email (succes ou erreur exacte), sans avoir besoin des logs Render.
+    A retirer une fois le bug resolu."""
+    return jsonify(_LAST_EMAIL_ATTEMPT)
 
 
 def create_email_token(user_id, purpose, hours_valid=24):
@@ -426,23 +457,12 @@ def login_required(view):
     return wrapped
 
 
-_LAST_API_KEY_ATTEMPT = {"note": "aucune tentative recue depuis le dernier redemarrage du serveur"}
-
-
 def get_user_id_from_api_key():
     """Authentification par cle API : utilisee par l'extension navigateur et
     l'application mobile, qui n'ont pas de session de connexion (cookie).
     Cle attendue dans l'en-tete HTTP 'X-API-Key'."""
-    global _LAST_API_KEY_ATTEMPT
     api_key = request.headers.get("X-API-Key")
     if not api_key:
-        _LAST_API_KEY_ATTEMPT = {
-            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "origin": request.headers.get("Origin"),
-            "user_agent": request.headers.get("User-Agent"),
-            "resultat": "AUCUN en-tete X-API-Key recu du tout",
-            "tous_les_en_tetes": dict(request.headers),
-        }
         print("[API KEY DIAGNOSTIC] Aucun en-tete X-API-Key recu du tout.", flush=True)
         return None
     with DB_LOCK:
@@ -450,35 +470,15 @@ def get_user_id_from_api_key():
         row = conn.execute("SELECT id FROM users WHERE api_key = ?", (api_key,)).fetchone()
         conn.close()
     masked = f"{api_key[:8]}...{api_key[-8:]} (longueur={len(api_key)})" if len(api_key) > 16 else f"'{api_key}' (longueur={len(api_key)})"
-    _LAST_API_KEY_ATTEMPT = {
-        "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "origin": request.headers.get("Origin"),
-        "cle_recue_masquee": masked,
-        "cle_recue_complete": api_key,
-        "trouvee_en_base": bool(row),
-    }
     print(f"[API KEY DIAGNOSTIC] Cle recue: {masked} -> trouvee={bool(row)}", flush=True)
     return row["id"] if row else None
-
-
-@app.route("/debug/last-api-key")
-def debug_last_api_key():
-    """Page de diagnostic temporaire : affiche la derniere tentative
-    d'authentification par cle API recue par le serveur, sans avoir besoin
-    de fouiller dans les logs Render. A retirer une fois le bug resolu."""
-    return jsonify(_LAST_API_KEY_ATTEMPT)
 
 
 def resolve_current_user_id():
     """Identifie l'utilisateur courant, que la requete vienne du tableau de
     bord web (session/cookie) ou d'un client externe (extension, mobile,
     poller) authentifie par cle API. Retourne None si aucun des deux."""
-    global _LAST_API_KEY_ATTEMPT
     if "user_id" in session:
-        _LAST_API_KEY_ATTEMPT = {
-            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "resultat": f"Requete authentifiee via SESSION COOKIE (pas cle API) - user_id={session['user_id']}",
-        }
         return session["user_id"]
     return get_user_id_from_api_key()
 
@@ -872,6 +872,34 @@ def change_email():
 
     session["user_email"] = new_email
     threading.Thread(target=send_verification_email, args=(session["user_id"], new_email), daemon=True).start()
+    return redirect(url_for("settings_page"))
+
+
+@app.route("/settings/change-password", methods=["POST"])
+@login_required
+def change_password():
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if len(new_password) < 6:
+        return _settings_with_error("Le nouveau mot de passe doit contenir au moins 6 caracteres.")
+    if new_password != confirm_password:
+        return _settings_with_error("Les deux mots de passe ne correspondent pas.")
+
+    with DB_LOCK:
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+
+        if not check_password_hash(user["password_hash"], current_password):
+            conn.close()
+            return _settings_with_error("Mot de passe actuel incorrect.")
+
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                      (generate_password_hash(new_password), session["user_id"]))
+        conn.commit()
+        conn.close()
+
     return redirect(url_for("settings_page"))
 
 

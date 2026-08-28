@@ -548,6 +548,29 @@
 
       <div class="settings-card">
         <div class="settings-card-header">
+          <span class="settings-card-icon tone-safe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <h2>Mot de passe</h2>
+        </div>
+        <div class="desc">Choisissez un nouveau mot de passe pour votre compte.</div>
+
+        <form method="POST" action="/settings/change-password">
+          <label for="current_password_pw">Mot de passe actuel</label>
+          <input type="password" id="current_password_pw" name="current_password" required placeholder="••••••••">
+
+          <label for="new_password">Nouveau mot de passe</label>
+          <input type="password" id="new_password" name="new_password" required minlength="6" placeholder="6 caractères minimum">
+
+          <label for="confirm_password">Confirmer le nouveau mot de passe</label>
+          <input type="password" id="confirm_password" name="confirm_password" required minlength="6" placeholder="6 caractères minimum">
+
+          <button type="submit">Changer le mot de passe</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-header">
           <span class="settings-card-icon tone-warn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2 12.5 10.5"/><circle cx="7.5" cy="15.5" r="4.5"/><path d="M15 8l3 3"/><path d="M17.5 5.5 20 8"/></svg>
           </span>
