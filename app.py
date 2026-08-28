@@ -25,6 +25,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet, InvalidToken
 
 from analyzer import PhishingAnalyzer
+from urlintel import analyze_urls
 from threat_intel import check_virustotal, check_urlscan
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -252,6 +253,13 @@ def send_contact_message(name, from_email, subject, message_body):
 # =============================================================================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# Nombre minimum de comptes DISTINCTS devant signaler independamment un
+# expediteur comme frauduleux avant que la correction manuelle d'un seul
+# devienne "verite partagee" affectant les analyses des autres utilisateurs.
+# Empeche un compte isole (erreur ou malveillance) de fausser la reputation
+# partagee - voir api_feedback() et get_sender_reputation().
+COMMUNITY_CONFIRM_THRESHOLD = 3
+
 # --- DIAGNOSTIC TEMPORAIRE : affiche l'hote/base reellement utilises au ---
 # --- demarrage, sans jamais logger le mot de passe. A retirer une fois ---
 # --- le probleme de perte de donnees resolu. ---
@@ -383,6 +391,16 @@ def init_db():
                 sender TEXT,
                 analysis_id INTEGER,
                 timestamp TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS community_reports (
+                id SERIAL PRIMARY KEY,
+                sender TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                reported_by_user_id INTEGER NOT NULL,
+                timestamp TEXT,
+                UNIQUE(sender, reported_by_user_id)
             )
         """)
         conn.execute("""
@@ -633,10 +651,35 @@ def get_sender_reputation(sender):
             "SELECT phishing_count, total_count FROM sender_reputation WHERE sender = ?",
             (sender,)
         ).fetchone()
+        threat_votes = conn.execute(
+            "SELECT COUNT(DISTINCT reported_by_user_id) c FROM community_reports WHERE sender = ? AND direction = 'threat'",
+            (sender,)
+        ).fetchone()["c"]
+        legit_votes = conn.execute(
+            "SELECT COUNT(DISTINCT reported_by_user_id) c FROM community_reports WHERE sender = ? AND direction = 'legitimate'",
+            (sender,)
+        ).fetchone()["c"]
         conn.close()
-        if row and row["total_count"] > 1 and row["phishing_count"] >= 1:
-            return {"repeat_offender": True, "phishing_count": row["phishing_count"], "total_count": row["total_count"]}
-        return {"repeat_offender": False}
+
+    # Signal automatique : inchange, base uniquement sur le moteur (deja fiable
+    # car ne depend d'aucune correction manuelle isolee).
+    automatic_flag = bool(row and row["total_count"] > 1 and row["phishing_count"] >= 1)
+
+    # Signal communautaire : ne compte que si au moins COMMUNITY_CONFIRM_THRESHOLD
+    # comptes DIFFERENTS sont d'accord, et que l'avis "menace" l'emporte sur
+    # l'avis "legitime" pour cet expediteur - un seul compte ne peut donc
+    # jamais, a lui seul, faire basculer la reputation partagee.
+    community_confirmed = threat_votes >= COMMUNITY_CONFIRM_THRESHOLD and threat_votes > legit_votes
+
+    if automatic_flag or community_confirmed:
+        return {
+            "repeat_offender": True,
+            "phishing_count": row["phishing_count"] if row else 0,
+            "total_count": row["total_count"] if row else 0,
+            "community_confirmed": community_confirmed,
+            "community_votes": threat_votes,
+        }
+    return {"repeat_offender": False}
 
 # Historique en memoire desactive : tout passe maintenant par SQLite (voir save_analysis)
 
@@ -1237,18 +1280,37 @@ def api_analytics():
 @app.route("/api/feedback", methods=["POST"])
 @login_required
 def api_feedback():
-    """Permet de corriger une analyse (faux positif/negatif) - alimente l'amelioration continue.
-    Restreint aux analyses appartenant a l'utilisateur connecte."""
+    """Permet de corriger une analyse (faux positif/negatif) - alimente
+    l'amelioration continue ET, sous condition, la reputation partagee
+    entre utilisateurs.
+
+    Important : une correction seule n'affecte JAMAIS directement les
+    autres comptes. Elle enregistre un "vote" individuel (une personne =
+    une voix par expediteur, modifiable si elle change d'avis). La
+    reputation partagee (repeat_offender, campagnes) n'est mise a jour que
+    lorsque COMMUNITY_CONFIRM_THRESHOLD comptes DIFFERENTS sont
+    independamment arrives a la meme conclusion - voir get_sender_reputation().
+    Ca evite qu'un compte isole (erreur ou malveillance) ne fausse ce que
+    voient tous les autres utilisateurs.
+
+    Restreint aux analyses appartenant a l'utilisateur connecte (on ne peut
+    corriger que ses propres analyses, mais le VOTE qui en resulte compte
+    bien vers le consensus partage)."""
     data = request.get_json(force=True)
     analysis_id = data.get("id")
     corrected_label = data.get("label")
     if not analysis_id or corrected_label not in ("PHISHING", "SUSPECT", "LEGITIME"):
         return jsonify({"error": "parametres invalides"}), 400
 
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    direction = "threat" if corrected_label in ("PHISHING", "SUSPECT") else "legitimate"
+
     with DB_LOCK:
         conn = get_db()
-        owner = conn.execute("SELECT user_id FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
-        if not owner or owner["user_id"] != session["user_id"]:
+        analysis = conn.execute(
+            "SELECT * FROM analyses WHERE id = ?", (analysis_id,)
+        ).fetchone()
+        if not analysis or analysis["user_id"] != session["user_id"]:
             conn.close()
             return jsonify({"error": "analyse introuvable"}), 404
 
@@ -1256,17 +1318,48 @@ def api_feedback():
             "UPDATE analyses SET corrected_label = ? WHERE id = ?",
             (corrected_label, analysis_id)
         )
-        conn.commit()
 
-        # Ajoute cet exemple corrige au jeu de donnees pour un futur re-entrainement
-        row = conn.execute("SELECT text FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+        sender = analysis["sender"] or "inconnu"
+
+        # Un vote par compte et par expediteur - modifiable si la personne
+        # change d'avis, mais ne compte jamais deux fois.
+        conn.execute("""
+            INSERT INTO community_reports (sender, direction, reported_by_user_id, timestamp)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(sender, reported_by_user_id) DO UPDATE SET
+                direction = EXCLUDED.direction,
+                timestamp = EXCLUDED.timestamp
+        """, (sender, direction, session["user_id"], now_str))
+
+        threat_votes = conn.execute(
+            "SELECT COUNT(DISTINCT reported_by_user_id) c FROM community_reports WHERE sender = ? AND direction = 'threat'",
+            (sender,)
+        ).fetchone()["c"]
+
+        # Des que le consensus est atteint (et confirme par ce vote), les
+        # domaines de CETTE analyse rejoignent les campagnes partagees -
+        # chaque contributeur au consensus ajoute ses propres domaines.
+        if direction == "threat" and threat_votes >= COMMUNITY_CONFIRM_THRESHOLD:
+            already_linked = conn.execute(
+                "SELECT 1 FROM domain_sightings WHERE analysis_id = ?", (analysis_id,)
+            ).fetchone()
+            if not already_linked:
+                for domain in analyze_urls(analysis["text"])[2]:
+                    conn.execute(
+                        "INSERT INTO domain_sightings (domain, sender, analysis_id, timestamp) VALUES (?, ?, ?, ?)",
+                        (domain, sender, analysis_id, analysis["timestamp"])
+                    )
+
+        conn.commit()
         conn.close()
 
-    if row:
-        label_int = 1 if corrected_label in ("PHISHING", "SUSPECT") else 0
-        text_escaped = row["text"].replace('"', '""')
-        with open(os.path.join(os.path.dirname(__file__), "data", "feedback.csv"), "a", encoding="utf-8") as f:
-            f.write(f'"{text_escaped}",{label_int}\n')
+    # Ajoute cet exemple corrige au jeu de donnees pour un futur re-entrainement
+    # (utile independamment du consensus - c'est un signal d'entrainement,
+    # pas une affirmation partagee en temps reel).
+    label_int = 1 if corrected_label in ("PHISHING", "SUSPECT") else 0
+    text_escaped = analysis["text"].replace('"', '""')
+    with open(os.path.join(os.path.dirname(__file__), "data", "feedback.csv"), "a", encoding="utf-8") as f:
+        f.write(f'"{text_escaped}",{label_int}\n')
 
     return jsonify({"ok": True})
 
