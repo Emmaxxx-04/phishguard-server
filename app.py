@@ -426,12 +426,23 @@ def login_required(view):
     return wrapped
 
 
+_LAST_API_KEY_ATTEMPT = {"note": "aucune tentative recue depuis le dernier redemarrage du serveur"}
+
+
 def get_user_id_from_api_key():
     """Authentification par cle API : utilisee par l'extension navigateur et
     l'application mobile, qui n'ont pas de session de connexion (cookie).
     Cle attendue dans l'en-tete HTTP 'X-API-Key'."""
+    global _LAST_API_KEY_ATTEMPT
     api_key = request.headers.get("X-API-Key")
     if not api_key:
+        _LAST_API_KEY_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "origin": request.headers.get("Origin"),
+            "user_agent": request.headers.get("User-Agent"),
+            "resultat": "AUCUN en-tete X-API-Key recu du tout",
+            "tous_les_en_tetes": dict(request.headers),
+        }
         print("[API KEY DIAGNOSTIC] Aucun en-tete X-API-Key recu du tout.", flush=True)
         return None
     with DB_LOCK:
@@ -439,15 +450,35 @@ def get_user_id_from_api_key():
         row = conn.execute("SELECT id FROM users WHERE api_key = ?", (api_key,)).fetchone()
         conn.close()
     masked = f"{api_key[:8]}...{api_key[-8:]} (longueur={len(api_key)})" if len(api_key) > 16 else f"'{api_key}' (longueur={len(api_key)})"
+    _LAST_API_KEY_ATTEMPT = {
+        "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "origin": request.headers.get("Origin"),
+        "cle_recue_masquee": masked,
+        "cle_recue_complete": api_key,
+        "trouvee_en_base": bool(row),
+    }
     print(f"[API KEY DIAGNOSTIC] Cle recue: {masked} -> trouvee={bool(row)}", flush=True)
     return row["id"] if row else None
+
+
+@app.route("/debug/last-api-key")
+def debug_last_api_key():
+    """Page de diagnostic temporaire : affiche la derniere tentative
+    d'authentification par cle API recue par le serveur, sans avoir besoin
+    de fouiller dans les logs Render. A retirer une fois le bug resolu."""
+    return jsonify(_LAST_API_KEY_ATTEMPT)
 
 
 def resolve_current_user_id():
     """Identifie l'utilisateur courant, que la requete vienne du tableau de
     bord web (session/cookie) ou d'un client externe (extension, mobile,
     poller) authentifie par cle API. Retourne None si aucun des deux."""
+    global _LAST_API_KEY_ATTEMPT
     if "user_id" in session:
+        _LAST_API_KEY_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "resultat": f"Requete authentifiee via SESSION COOKIE (pas cle API) - user_id={session['user_id']}",
+        }
         return session["user_id"]
     return get_user_id_from_api_key()
 
