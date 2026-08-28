@@ -432,11 +432,14 @@ def get_user_id_from_api_key():
     Cle attendue dans l'en-tete HTTP 'X-API-Key'."""
     api_key = request.headers.get("X-API-Key")
     if not api_key:
+        print("[API KEY DIAGNOSTIC] Aucun en-tete X-API-Key recu du tout.", flush=True)
         return None
     with DB_LOCK:
         conn = get_db()
         row = conn.execute("SELECT id FROM users WHERE api_key = ?", (api_key,)).fetchone()
         conn.close()
+    masked = f"{api_key[:8]}...{api_key[-8:]} (longueur={len(api_key)})" if len(api_key) > 16 else f"'{api_key}' (longueur={len(api_key)})"
+    print(f"[API KEY DIAGNOSTIC] Cle recue: {masked} -> trouvee={bool(row)}", flush=True)
     return row["id"] if row else None
 
 
