@@ -373,8 +373,17 @@
   .key-box{
     display:flex; align-items:center; gap:10px; background:var(--panel-2); border:1px solid var(--line);
     border-radius:9px; padding:12px 14px; font-family:'IBM Plex Mono',monospace; font-size:13px;
-    word-break:break-all;
   }
+  .key-box-text{flex:1 1 auto; min-width:0; word-break:break-all; letter-spacing:0.02em;}
+  .key-box-actions{display:flex; align-items:center; gap:4px; flex:0 0 auto;}
+  .key-box-btn{
+    display:flex; align-items:center; justify-content:center; width:30px; height:30px; flex:0 0 auto;
+    background:transparent; border:1px solid var(--line); border-radius:7px; color:var(--muted);
+    cursor:pointer; margin:0; padding:0; transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .key-box-btn:hover{color:var(--text); border-color:var(--accent); background:rgba(91,140,255,0.08);}
+  .key-box-btn svg{width:15px; height:15px;}
+  .key-box-btn.copied{color:var(--safe); border-color:var(--safe);}
   .settings-card label{display:block; font-size:11px; color:var(--muted); margin:16px 0 6px; text-transform:uppercase; letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;}
   .settings-card input{
     width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
@@ -582,7 +591,15 @@
           Ne la partage avec personne.
         </div>
         <div class="key-box">
-          <span id="apiKeyText">{{ user.api_key }}</span>
+          <span class="key-box-text" id="apiKeyText" data-key="{{ user.api_key }}">••••••••••••••••••••••••••••••••••••••••••••••</span>
+          <div class="key-box-actions">
+            <button type="button" class="key-box-btn" id="toggleKeyBtn" title="Afficher/masquer la clé" aria-label="Afficher ou masquer la clé API">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button type="button" class="key-box-btn" id="copyKeyBtn" title="Copier la clé" aria-label="Copier la clé API">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
         </div>
         <form method="POST" action="/settings/regenerate-key" onsubmit="return confirm('Régénérer la clé invalidera l\'ancienne partout où elle est utilisée (extension, mobile). Continuer ?');">
           <button type="submit" class="secondary">Régénérer la clé</button>
@@ -632,6 +649,44 @@
 </div><!-- /app-shell -->
 
 <script>
+/* =========================================================
+   Cle API : masquee par defaut, bouton oeil pour afficher/
+   masquer, bouton pour copier dans le presse-papiers.
+   ========================================================= */
+(function(){
+  const keyEl = document.getElementById('apiKeyText');
+  const toggleBtn = document.getElementById('toggleKeyBtn');
+  const copyBtn = document.getElementById('copyKeyBtn');
+  if(!keyEl || !toggleBtn || !copyBtn) return;
+
+  const realKey = keyEl.getAttribute('data-key');
+  const masked = '•'.repeat(Math.max(realKey.length, 24));
+  let visible = false;
+
+  const eyeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOffIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.3 20.3 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a20.3 20.3 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+  toggleBtn.addEventListener('click', () => {
+    visible = !visible;
+    keyEl.textContent = visible ? realKey : masked;
+    toggleBtn.innerHTML = visible ? eyeOffIcon : eyeIcon;
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(realKey);
+      copyBtn.classList.add('copied');
+      copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      }, 1800);
+    } catch(e) {
+      console.warn('Copie impossible :', e);
+    }
+  });
+})();
+
 function toggleTheme(){
   const root = document.documentElement;
   const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
