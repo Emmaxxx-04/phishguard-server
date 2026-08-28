@@ -169,6 +169,7 @@ def send_verification_email(user_id, email_addr):
     """Ne doit jamais faire planter l'appelant (inscription, changement
     d'email) : toute erreur ici est loggee et avalee, l'email est simplement
     considere comme non envoye."""
+    global _LAST_EMAIL_ATTEMPT
     try:
         token = create_email_token(user_id, "verify", hours_valid=48)
         link = f"{APP_BASE_URL}/verify-email/{token}"
@@ -183,6 +184,11 @@ def send_verification_email(user_id, email_addr):
         return send_email(email_addr, "Confirmez votre adresse email — FishGuard", body)
     except Exception as e:
         print(f"[EMAIL] send_verification_email a echoue pour {email_addr}: {e}")
+        _LAST_EMAIL_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "destinataire": email_addr,
+            "resultat": f"ECHEC AVANT send_email() - {type(e).__name__}: {e}",
+        }
         return False
 
 
@@ -906,12 +912,20 @@ def change_password():
 @app.route("/settings/resend-verification", methods=["POST"])
 @login_required
 def resend_verification():
+    global _LAST_EMAIL_ATTEMPT
     with DB_LOCK:
         conn = get_db()
         user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
         conn.close()
     if user and not user["email_verified"]:
         threading.Thread(target=send_verification_email, args=(user["id"], user["email"]), daemon=True).start()
+    else:
+        _LAST_EMAIL_ATTEMPT = {
+            "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "resultat": "resend_verification: envoi NON declenche",
+            "user_trouve": bool(user),
+            "email_verified_en_base": user["email_verified"] if user else None,
+        }
     return redirect(url_for("settings_page"))
 
 
