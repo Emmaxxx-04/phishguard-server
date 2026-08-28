@@ -376,14 +376,14 @@
   }
   .key-box-text{flex:1 1 auto; min-width:0; word-break:break-all; letter-spacing:0.02em;}
   .key-box-actions{display:flex; align-items:center; gap:4px; flex:0 0 auto;}
-  .key-box-btn{
+  .settings-card .key-box-btn{
     display:flex; align-items:center; justify-content:center; width:30px; height:30px; flex:0 0 auto;
     background:transparent; border:1px solid var(--line); border-radius:7px; color:var(--muted);
-    cursor:pointer; margin:0; padding:0; transition:color .15s ease, border-color .15s ease, background .15s ease;
+    cursor:pointer; margin:0; padding:0; box-shadow:none; transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
-  .key-box-btn:hover{color:var(--text); border-color:var(--accent); background:rgba(91,140,255,0.08);}
+  .settings-card .key-box-btn:hover{color:var(--text); border-color:var(--accent); background:rgba(91,140,255,0.08); transform:none; box-shadow:none;}
   .key-box-btn svg{width:15px; height:15px;}
-  .key-box-btn.copied{color:var(--safe); border-color:var(--safe);}
+  .settings-card .key-box-btn.copied{color:var(--safe); border-color:var(--safe);}
   .settings-card label{display:block; font-size:11px; color:var(--muted); margin:16px 0 6px; text-transform:uppercase; letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;}
   .settings-card input{
     width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
