@@ -158,7 +158,12 @@
   .stat-card:hover{transform:translateY(-2px); border-color:var(--line); border-left-color:var(--stat-accent, var(--accent));}
   .stat-icon{width:19px; height:19px; opacity:0.85; margin-bottom:10px; display:block; color:var(--stat-accent, var(--accent));}
   .stat-value{font-family:'Fraunces',serif; font-size:27px; font-weight:700; line-height:1;}
-  .stat-label{color:var(--muted); font-size:11px; font-family:'IBM Plex Mono',monospace; margin-top:6px; text-transform:uppercase; letter-spacing:0.05em;}
+  .stat-label{color:var(--muted); font-size:11px; font-family:'IBM Plex Mono',monospace; margin-top:6px; text-transform:uppercase; letter-spacing:0.05em; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .shared-badge{
+    display:inline-flex; align-items:center; font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600;
+    text-transform:none; letter-spacing:0.02em; color:var(--warn); background:rgba(224,166,62,0.14);
+    border:1px solid rgba(224,166,62,0.35); padding:2px 7px; border-radius:20px;
+  }
 
   .analytics-row{max-width:1200px; margin:0 auto; padding:22px 40px 0; display:grid; grid-template-columns:1fr 1fr 1.2fr; gap:16px;}
   @media(max-width:960px){ .analytics-row{grid-template-columns:1fr;} }
@@ -444,10 +449,10 @@
     <div class="stat-value" id="statThreatPct" style="color:var(--danger)">0%</div>
     <div class="stat-label">Taux de menace</div>
   </div>
-  <div class="stat-card" style="--stat-accent: var(--warn)" title="Expéditeurs déjà flaggés comme suspects plus d'une fois">
+  <div class="stat-card" style="--stat-accent: var(--warn)" title="Expéditeurs déjà flaggés comme suspects plus d'une fois, tous comptes FishGuard confondus — cette carte est la seule partagée entre utilisateurs.">
     <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
     <div class="stat-value" id="statOffenders" style="color:var(--warn)">0</div>
-    <div class="stat-label">Expéditeurs récidivistes</div>
+    <div class="stat-label">Expéditeurs récidivistes <span class="shared-badge">Partagé</span></div>
   </div>
   <div class="stat-card" style="--stat-accent: var(--safe)" title="Analyses corrigées manuellement, réinjectées pour améliorer le modèle">
     <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="var(--safe)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8.5 12.2 11 14.7 15.5 9.3"/></svg>
