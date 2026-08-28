@@ -324,24 +324,57 @@
 
 
   /* ---------- Page "Nous contacter" ---------- */
-  .contact-wrap{max-width:760px; margin:0 auto; padding:36px 40px 60px;}
-  .contact-grid{display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start;}
+  .contact-wrap{max-width:800px; margin:0 auto; padding:36px 40px 60px;}
+  .contact-grid{display:grid; grid-template-columns:1.15fr 1fr; gap:20px; align-items:start;}
   @media(max-width:720px){ .contact-grid{grid-template-columns:1fr;} .contact-wrap{padding:28px 20px 48px;} }
-  .contact-info-item{display:flex; align-items:flex-start; gap:12px; margin-bottom:18px;}
+
+  .panel-icon-header{display:flex; align-items:center; gap:12px; margin-bottom:4px;}
+  .panel-icon-badge{
+    width:36px; height:36px; border-radius:10px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(217,164,65,0.1); border:1px solid rgba(217,164,65,0.3); color:var(--accent);
+  }
+  .panel-icon-badge svg{width:17px; height:17px;}
+  .panel-icon-badge.tone-steel{background:rgba(143,166,214,0.1); border-color:rgba(143,166,214,0.32); color:var(--accent-2);}
+  .panel-icon-header h2{margin:0;}
+
+  .form-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:480px){ .form-row{grid-template-columns:1fr;} }
+  .form-row label{margin-top:0;}
+
+  .contact-info-item{display:flex; align-items:flex-start; gap:12px; margin-bottom:20px;}
   .contact-info-item:last-child{margin-bottom:0;}
-  .contact-info-item svg{width:18px; height:18px; flex:0 0 auto; color:var(--accent-2); margin-top:2px;}
+  .contact-info-item .item-icon{
+    width:34px; height:34px; border-radius:9px; flex:0 0 auto; margin-top:1px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--accent-2);
+  }
+  .contact-info-item .item-icon svg{width:16px; height:16px;}
   .contact-info-item .label{font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); margin:0;}
-  .contact-info-item .value{font-size:13.5px; color:var(--text); margin-top:2px;}
+  .contact-info-item .value{font-size:13.5px; color:var(--text); margin-top:2px; line-height:1.5;}
   .contact-info-item a{color:var(--accent-2); text-decoration:none; font-weight:600;}
   .contact-info-item a:hover{text-decoration:underline;}
   .mailto-btn{
-    display:inline-flex; align-items:center; gap:8px; margin-top:6px;
+    display:inline-flex; align-items:center; gap:8px; margin-top:8px;
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
     text-decoration:none; font-size:12.5px; font-weight:600; padding:9px 16px; border-radius:9px;
     transition:border-color .15s ease, transform .12s ease;
   }
   .mailto-btn:hover{border-color:var(--accent); transform:translateY(-1px);}
   .mailto-btn svg{width:15px; height:15px;}
+
+  .team-chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .team-chip{
+    display:inline-flex; align-items:center; gap:7px; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:999px; padding:5px 12px 5px 5px; font-size:12px;
+  }
+  .team-chip-avatar{
+    width:22px; height:22px; border-radius:50%; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--accent); color:#1A1305; font-family:'Fraunces',serif; font-weight:700; font-size:10.5px;
+  }
+  .team-chip-role{color:var(--muted); font-size:10.5px; margin-left:2px;}
+
   .contact-success{
     background:rgba(63,200,143,0.12); border:1px solid rgba(63,200,143,0.4); color:var(--safe);
     border-radius:9px; padding:14px; font-size:13.5px; line-height:1.6; margin-bottom:18px;
@@ -444,31 +477,48 @@
 
       <div class="contact-grid">
         <div class="panel">
-          <h2>Envoyer un message</h2>
+          <div class="panel-icon-header">
+            <span class="panel-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+            </span>
+            <h2>Envoyer un message</h2>
+          </div>
           <div class="desc">Décrivez votre demande, on y répond au plus vite.</div>
           <form method="POST" action="/contact">
-            <label for="name">Nom</label>
-            <input type="text" id="name" name="name" value="{{ user_name or '' }}" placeholder="Votre nom">
-
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" required value="{{ user_email or '' }}" placeholder="vous@exemple.com">
+            <div class="form-row">
+              <div>
+                <label for="name">Nom</label>
+                <input type="text" id="name" name="name" value="{{ user_name or '' }}" placeholder="Votre nom">
+              </div>
+              <div>
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required value="{{ user_email or '' }}" placeholder="vous@exemple.com">
+              </div>
+            </div>
 
             <label for="subject">Sujet</label>
             <input type="text" id="subject" name="subject" placeholder="ex: Bug sur le Security Check-up">
 
             <label for="message">Message</label>
-            <textarea id="message" name="message" required placeholder="Décrivez votre demande en détail..."></textarea>
+            <textarea id="message" name="message" required placeholder="Décrivez votre demande en détail..." style="min-height:150px;"></textarea>
 
             <button type="submit">Envoyer le message</button>
           </form>
         </div>
 
         <div class="panel">
-          <h2>Autres façons de nous joindre</h2>
+          <div class="panel-icon-header">
+            <span class="panel-icon-badge tone-steel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            </span>
+            <h2>Autres façons de nous joindre</h2>
+          </div>
           <div class="desc">L'équipe derrière FishGuard — projet JPOPE 2026.</div>
 
           <div class="contact-info-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+            <span class="item-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5 12 13l9-6.5"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+            </span>
             <div>
               <p class="label">Email direct</p>
               <div class="value"><a href="mailto:{{ contact_email or 'contact@fishguard.me' }}">{{ contact_email or 'contact@fishguard.me' }}</a></div>
@@ -480,7 +530,19 @@
           </div>
 
           <div class="contact-info-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
+            <span class="item-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+            </span>
+            <div>
+              <p class="label">Délai de réponse habituel</p>
+              <div class="value">Généralement sous 24 à 48h, du lundi au vendredi.</div>
+            </div>
+          </div>
+
+          <div class="contact-info-item">
+            <span class="item-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10Z"/></svg>
+            </span>
             <div>
               <p class="label">Projet</p>
               <div class="value">FishGuard — JPOPE 2026, iP Net Institute of Technology (Lomé, Togo)</div>
@@ -488,10 +550,16 @@
           </div>
 
           <div class="contact-info-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <div>
+            <span class="item-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <div style="width:100%;">
               <p class="label">Équipe</p>
-              <div class="value">TOMETY Emmanuel Francis (backend) · TOUKA Lumen (Android &amp; extension) · DOSSOU Hannielle Samuella (UI/UX mobile)</div>
+              <div class="team-chips">
+                <span class="team-chip"><span class="team-chip-avatar">T</span>TOMETY Emmanuel<span class="team-chip-role">Backend</span></span>
+                <span class="team-chip"><span class="team-chip-avatar">L</span>TOUKA Lumen<span class="team-chip-role">Android · Extension</span></span>
+                <span class="team-chip"><span class="team-chip-avatar">H</span>DOSSOU Hannielle<span class="team-chip-role">UI/UX mobile</span></span>
+              </div>
             </div>
           </div>
         </div>
