@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Lecture des SMS entrants pour analyse directe -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+
+    <!-- Notification propre à FishGuard (alerte de menace détectée) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Accès réseau pour le mode "backend" optionnel, et le téléchargement
+         ponctuel du modèle vocal hors ligne s'il n'est pas déjà embarqué -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Service de premier plan pour rester actif en arrière-plan -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Détection des appels entrants/en cours : état + numéro uniquement,
+         jamais le contenu audio de l'appel lui-même -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- Vérifie si le numéro appelant est déjà enregistré comme contact, pour
+         ne proposer l'analyse que sur les numéros inconnus -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Micro, utilisé UNIQUEMENT quand l'utilisateur active volontairement
+         "Protéger cet appel" (haut-parleur + micro), jamais en arrière-plan
+         silencieux -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Permet d'afficher directement à l'écran (pop-up plein écran, comme un
+         appel entrant ou une alarme) la question "numéro inconnu, analyser ?" —
+         sans ça, un numéro inconnu ne recevrait qu'une simple notification. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <application
+        android:name=".FishGuardApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.FishGuard"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.FishGuard">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Écran plein autonome (lançable depuis la notification "Appel en cours"
+          même si FishGuard n'est pas déjà ouvert) : consentement explicite,
+          puis suivi en direct du score pendant la protection d'appel.
+        -->
+        <activity
+            android:name=".calls.CallProtectionActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.FishGuard"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true" />
+
+        <!--
+          NotificationListenerService : capte les notifications système,
+          y compris WhatsApp, Messages/SMS, et toute autre appli de messagerie.
+          L'utilisateur doit activer ce service manuellement dans
+          Réglages > Notifications > Accès aux notifications (obligatoire côté OS,
+          aucune app ne peut s'auto-accorder ce droit).
+        -->
+        <service
+            android:name=".notification.NotificationCaptureService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Réception directe des SMS (indépendante des notifications) -->
+        <receiver
+            android:name=".notification.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Vérifie le numéro d'un appel entrant contre la liste des numéros signalés,
+          AVANT que le téléphone sonne. N'a accès qu'au numéro, jamais au contenu de
+          la conversation. Nécessite que l'utilisateur accorde le rôle système
+          "Filtrage des appels" une fois (voir Réglages > Protection des appels).
+        -->
+        <service
+            android:name=".calls.ScamCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Détecte le début/la fin d'un appel (état seulement, jamais l'audio) pour
+          proposer la protection en direct (haut-parleur + micro + reconnaissance
+          vocale hors ligne).
+        -->
+        <receiver
+            android:name=".calls.CallStateReceiver"
+            android:exported="true"
+            android:permission="android.permission.READ_PHONE_STATE">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Service de premier plan qui capte le micro UNIQUEMENT pendant qu'une
+          protection d'appel est activement en cours (déclenchement manuel, jamais
+          automatique). Type "microphone" obligatoire depuis Android 14.
+        -->
+        <service
+            android:name=".calls.CallProtectionService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+    </application>
+</manifest>

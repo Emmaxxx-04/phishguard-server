@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.FishGuard" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#080C11</item>
+        <item name="android:windowBackground">#080C11</item>
+    </style>
+</resources>
