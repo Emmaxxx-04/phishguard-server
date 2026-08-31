@@ -1,6 +1,6 @@
 """
 Module d'enrichissement via des sources de threat intelligence externes.
-Actuellement : VirusTotal (reputation de domaines/URLs via ~70 moteurs antivirus).
+Actuellement : VirusTotal (reputation de domaines/URLs et de FICHIERS via ~70 moteurs antivirus).
 
 Design volontairement defensif : ce module ne doit JAMAIS faire planter l'app
 principale. Toute erreur reseau, timeout, ou absence de cle API renvoie un
@@ -14,6 +14,7 @@ email/SMS recu.
 import os
 import time
 import base64
+import hashlib
 import requests
 
 VT_API_KEY = os.environ.get("VIRUSTOTAL_API_KEY", "")
@@ -118,7 +119,105 @@ def check_virustotal(url: str):
         }
 
 
-def check_urlscan(url: str):
+def check_virustotal_file(file_bytes: bytes):
+    """Interroge VirusTotal via l'EMPREINTE (SHA256) d'un fichier joint,
+    sans jamais envoyer le contenu reel du fichier a un tiers - seule une
+    empreinte a sens unique quitte le serveur.
+
+    Couvre en un seul mecanisme plusieurs lacunes qu'aucune analyse locale
+    ne peut raisonnablement combler : archives RAR (pas de dependance
+    systeme fragile type binaire unrar), formats d'archive rares, et
+    fichiers deliberement malformes pour exploiter une faille du lecteur
+    (VirusTotal agrege des moteurs qui font de l'analyse comportementale/
+    sandboxee, bien au-dela de ce qu'une regle statique peut detecter).
+
+    Limite honnete : ne fonctionne que si VirusTotal a DEJA vu ce fichier
+    precis auparavant (recherche par empreinte, pas d'upload). Un fichier
+    totalement inedit renvoie simplement "inconnu", pas "sain".
+
+    Retourne un dict au meme format que check_virustotal (URLs) :
+    {
+        "available": bool, "found": bool,
+        "malicious": int, "suspicious": int, "harmless": int, "total_engines": int,
+        "message": str,
+    }
+    """
+    if not VT_API_KEY:
+        return {
+            "available": False, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": "Cle API VirusTotal non configuree sur ce serveur.",
+        }
+
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    headers = {"x-apikey": VT_API_KEY}
+
+    try:
+        res = requests.get(
+            f"{VT_BASE_URL}/files/{file_hash}",
+            headers=headers,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except requests.exceptions.RequestException as e:
+        return {
+            "available": False, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": f"VirusTotal injoignable pour le moment ({type(e).__name__}).",
+        }
+
+    if res.status_code == 404:
+        return {
+            "available": True, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": "Fichier inconnu de VirusTotal (jamais analyse ailleurs) — "
+                       "nos verifications locales restent la source principale pour cette piece jointe.",
+        }
+
+    if res.status_code == 401:
+        return {
+            "available": False, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": "Cle API VirusTotal invalide.",
+        }
+
+    if res.status_code != 200:
+        return {
+            "available": False, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": f"VirusTotal a repondu de maniere inattendue (code {res.status_code}).",
+        }
+
+    try:
+        data = res.json()
+        stats = data["data"]["attributes"]["last_analysis_stats"]
+        malicious = stats.get("malicious", 0)
+        suspicious = stats.get("suspicious", 0)
+        harmless = stats.get("harmless", 0)
+        undetected = stats.get("undetected", 0)
+        total = malicious + suspicious + harmless + undetected
+
+        if malicious > 0:
+            message = f"{malicious} moteur(s) antivirus sur {total} classent ce fichier comme malveillant."
+        elif suspicious > 0:
+            message = f"{suspicious} moteur(s) antivirus sur {total} le jugent suspect."
+        else:
+            message = f"Aucun des {total} moteurs antivirus consultes ne signale ce fichier."
+
+        return {
+            "available": True, "found": True,
+            "malicious": malicious, "suspicious": suspicious,
+            "harmless": harmless, "total_engines": total,
+            "message": message,
+        }
+    except (KeyError, ValueError):
+        return {
+            "available": False, "found": False,
+            "malicious": 0, "suspicious": 0, "harmless": 0, "total_engines": 0,
+            "message": "Reponse VirusTotal illisible (format inattendu).",
+        }
+
+
+
     """Soumet une URL a URLScan.io pour capture d'ecran + analyse visuelle.
 
     Contrairement a VirusTotal, un scan URLScan prend reellement du temps

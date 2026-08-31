@@ -26,7 +26,14 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from analyzer import PhishingAnalyzer
 from urlintel import analyze_urls, is_allowlisted_domain
-from threat_intel import check_virustotal, check_urlscan
+from threat_intel import check_virustotal, check_urlscan, check_virustotal_file
+from pypdf import PdfReader
+from oletools.olevba import VBA_Parser
+from LnkParse3 import lnk_file
+import zipfile
+import tarfile
+import py7zr
+import io
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
@@ -1422,6 +1429,460 @@ def api_analyze():
     analysis_id = save_analysis(result, user_id=resolve_current_user_id())
     result["id"] = analysis_id
     result["reputation"] = reputation
+    return jsonify(result)
+
+
+# Extensions executables/scripts couramment utilisees pour deguiser un malware
+# en document inoffensif (double extension, ex: "facture.pdf.exe").
+DANGEROUS_EXTENSIONS = {
+    "exe", "scr", "bat", "cmd", "com", "pif", "vbs", "vbe", "js", "jse",
+    "jar", "msi", "msp", "ps1", "psm1", "wsf", "wsh", "hta", "reg", "lnk",
+    "apk", "docm", "xlsm", "pptm",
+}
+# Extensions "documents" derriere lesquelles on s'attend a NE PAS trouver
+# une extension executable juste apres (le signe d'un deguisement).
+DOCUMENT_LOOKING_EXTENSIONS = {
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv",
+    "jpg", "jpeg", "png", "gif", "zip", "rar",
+}
+RLO_CHAR = "\u202e"  # caractere d'inversion de sens d'ecriture (Right-to-Left Override)
+
+# Marqueurs structurels d'un PDF piege - technique standard des scanners PDF
+# legers (meme principe que l'outil pdfid) : on cherche ces mots-cles
+# directement dans les OCTETS BRUTS du fichier, sans dependre du texte
+# visible ni du nom du fichier. Un nom de fichier propre ("facture.pdf")
+# peut tres bien cacher un PDF dont le contenu reel est piege.
+PDF_MALWARE_KEYWORDS = {
+    b"/JavaScript": ("PHISHING", "Contient du code JavaScript embarque - vecteur d'exploitation classique dans les lecteurs PDF vulnerables"),
+    b"/JS": ("PHISHING", "Action JavaScript detectee dans la structure du PDF"),
+    b"/Launch": ("PHISHING", "Le PDF peut lancer un programme ou fichier externe automatiquement a l'ouverture"),
+    b"/OpenAction": ("SUSPECT", "Le PDF declenche une action automatique des l'ouverture du document"),
+    b"/EmbeddedFile": ("SUSPECT", "Un fichier est embarque a l'interieur du PDF - peut cacher un executable"),
+    b"/AA": ("SUSPECT", "Actions automatiques additionnelles definies, declenchees par des evenements du document"),
+    b"/RichMedia": ("SUSPECT", "Contenu multimedia enrichi - vecteur parfois utilise pour des exploits"),
+}
+_LABEL_PRIORITY = {"LEGITIME": 0, "SUSPECT": 1, "PHISHING": 2}
+
+
+def scan_pdf_structure(file_bytes):
+    """Inspecte le contenu BINAIRE reel du PDF (pas le texte affiche, pas le
+    nom de fichier) a la recherche de mecanismes connus d'exploitation :
+    JavaScript embarque, action de lancement automatique, fichier cache a
+    l'interieur du PDF. Retourne (label, reasons)."""
+    findings = []
+    worst = "LEGITIME"
+    for keyword, (severity, reason) in PDF_MALWARE_KEYWORDS.items():
+        if keyword in file_bytes:
+            findings.append(reason)
+            if _LABEL_PRIORITY[severity] > _LABEL_PRIORITY[worst]:
+                worst = severity
+    return worst, findings
+
+
+def scan_office_macros(file_bytes):
+    """Extrait et analyse les macros VBA ET XLM (Excel 4.0, un format plus
+    ancien et distinct de VBA, parfois utilise specifiquement pour echapper
+    aux scanners qui ne cherchent que VBA) d'un document Office.
+    S'appuie sur oletools, la reference standard pour ce type d'analyse.
+
+    Retourne (label, reasons, has_macros: bool)."""
+    try:
+        vba = VBA_Parser("piece_jointe", data=file_bytes)
+    except Exception:
+        return "LEGITIME", [], False
+
+    try:
+        has_vba = vba.detect_vba_macros()
+        has_xlm = False
+        try:
+            has_xlm = vba.detect_xlm_macros()
+        except Exception:
+            pass  # pas tous les formats de fichier supportent la detection XLM
+
+        if not has_vba and not has_xlm:
+            return "LEGITIME", [], False
+
+        reasons = []
+        worst = "SUSPECT"  # presence de macros = au minimum SUSPECT par principe
+        seen = set()
+
+        if has_vba:
+            results = vba.analyze_macros()
+            if results:
+                for kw_type, keyword, description in results:
+                    key = (kw_type, keyword)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    reasons.append(f"Macro VBA — {description} (mot-cle : {keyword})")
+                    if kw_type in ("AutoExec", "Suspicious", "IOC"):
+                        worst = "PHISHING" if kw_type != "AutoExec" or len(results) > 1 else worst
+            else:
+                reasons.append("Le document contient des macros VBA (aucun signal malveillant specifique detecte, mais toute macro merite prudence)")
+
+        if has_xlm:
+            reasons.append(
+                "Le document contient des macros Excel 4.0 (XLM) — un format plus ancien "
+                "et moins surveille que VBA, parfois choisi specifiquement pour cette raison"
+            )
+            worst = "PHISHING" if worst == "PHISHING" else "SUSPECT"
+
+        return worst, reasons, True
+    finally:
+        vba.close()
+
+
+# Mots-cles reveles par la ligne de commande/cible d'un raccourci Windows
+# (.lnk) qui trahissent une intention malveillante - technique tres utilisee
+# dans de vraies campagnes reelles (Emotet, Qakbot) : le raccourci parait
+# anodin ("Facture.pdf.lnk") mais lance en realite une commande cachee.
+LNK_SUSPICIOUS_KEYWORDS = {
+    "powershell": "Lance PowerShell, souvent utilise pour executer du code cache",
+    "cmd.exe": "Lance l'invite de commandes Windows",
+    "mshta": "Lance mshta.exe, technique classique pour executer du HTML/JS malveillant",
+    "wscript": "Lance le moteur de script Windows (WScript)",
+    "cscript": "Lance le moteur de script Windows (CScript)",
+    "certutil": "Utilise certutil.exe, souvent detourne pour telecharger des fichiers",
+    "bitsadmin": "Utilise BITSAdmin, souvent detourne pour telecharger des fichiers en arriere-plan",
+    "-enc": "Commande PowerShell encodee en Base64 - technique d'obfuscation courante",
+    "-windowstyle hidden": "Execution en fenetre cachee, pour ne rien montrer a l'utilisateur",
+    "downloadfile": "Telechargement de fichier depuis Internet",
+    "downloadstring": "Telechargement et execution de code depuis Internet",
+    "invoke-expression": "Execution dynamique de code (obfuscation courante)",
+    " iex ": "Execution dynamique de code (raccourci PowerShell courant dans les malwares)",
+}
+
+
+def scan_lnk_file(file_bytes):
+    """Analyse un raccourci Windows (.lnk). Un raccourci peut sembler pointer
+    vers un document alors qu'il lance en realite une commande systeme
+    cachee (PowerShell, cmd, etc.) - technique tres utilisee dans de vraies
+    campagnes de malware par email. Retourne (label, reasons)."""
+    try:
+        lnk = lnk_file(io.BytesIO(file_bytes))
+        data = lnk.get_json()
+    except Exception:
+        return "LEGITIME", []
+
+    target_items = data.get("target", {}).get("items", []) or []
+    target_path = "\\".join(item.get("primary_name", "") for item in target_items if item.get("primary_name"))
+    args = data.get("data", {}).get("command_line_arguments", "") or ""
+    combined = f"{target_path} {args}".lower()
+
+    reasons = []
+    for kw, desc in LNK_SUSPICIOUS_KEYWORDS.items():
+        if kw in combined:
+            reasons.append(f"{desc} (detecte dans la cible/commande du raccourci)")
+
+    return ("PHISHING" if reasons else "LEGITIME"), reasons
+
+
+def scan_zip_archive(file_bytes):
+    """Inspecte une archive ZIP jointe : recherche un fichier a risque cache
+    a l'interieur, ou detecte une archive protegee par mot de passe (qui
+    empeche toute inspection - une technique d'evasion tres frequente pour
+    faire passer un fichier malveillant a travers les filtres automatiques,
+    puisque le mot de passe est generalement donne dans le corps du message
+    lui-meme). Retourne (label, reasons)."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(file_bytes))
+    except zipfile.BadZipFile:
+        return "LEGITIME", []
+
+    is_encrypted = any(info.flag_bits & 0x1 for info in zf.infolist())
+    if is_encrypted:
+        return "SUSPECT", [
+            "Archive protegee par mot de passe : impossible d'inspecter le contenu reel. "
+            "C'est une technique frequemment utilisee pour faire passer un fichier malveillant "
+            "a travers les filtres de securite automatiques"
+        ]
+
+    reasons = []
+    for info in zf.infolist():
+        inner_suspicious, inner_reasons = check_suspicious_filename(info.filename)
+        if inner_suspicious:
+            for r in inner_reasons:
+                reasons.append(f"Dans l'archive, {info.filename} : {r}")
+
+    return ("PHISHING" if reasons else "LEGITIME"), reasons
+
+
+def scan_7z_archive(file_bytes):
+    """Meme principe que scan_zip_archive, pour le format 7z (py7zr est une
+    bibliotheque Python pure, sans dependance systeme externe)."""
+    try:
+        archive = py7zr.SevenZipFile(io.BytesIO(file_bytes))
+    except Exception:
+        return "LEGITIME", []
+
+    reasons = []
+    try:
+        if archive.needs_password():
+            return "SUSPECT", [
+                "Archive 7z protegee par mot de passe : impossible d'inspecter le contenu reel. "
+                "Technique frequemment utilisee pour echapper aux filtres de securite automatiques"
+            ]
+        for name in archive.getnames():
+            inner_suspicious, inner_reasons = check_suspicious_filename(name)
+            if inner_suspicious:
+                for r in inner_reasons:
+                    reasons.append(f"Dans l'archive 7z, {name} : {r}")
+    finally:
+        archive.close()
+
+    return ("PHISHING" if reasons else "LEGITIME"), reasons
+
+
+def scan_tar_archive(file_bytes):
+    """Meme principe pour les archives TAR/TAR.GZ/TAR.BZ2 - couvert
+    nativement par le module standard tarfile, sans dependance supplementaire."""
+    try:
+        tar = tarfile.open(fileobj=io.BytesIO(file_bytes))
+    except Exception:
+        return "LEGITIME", []
+
+    reasons = []
+    for member in tar.getmembers():
+        inner_suspicious, inner_reasons = check_suspicious_filename(member.name)
+        if inner_suspicious:
+            for r in inner_reasons:
+                reasons.append(f"Dans l'archive tar, {member.name} : {r}")
+    tar.close()
+
+    return ("PHISHING" if reasons else "LEGITIME"), reasons
+
+
+def check_suspicious_filename(filename):
+    """Detecte les techniques classiques de deguisement de fichier malveillant :
+    double extension (facture.pdf.exe), caractere RLO (inversion visuelle du
+    nom pour cacher la vraie extension), ou extension executable directe.
+    Retourne (is_suspicious: bool, reasons: list[str])."""
+    reasons = []
+    if not filename:
+        return False, reasons
+
+    if RLO_CHAR in filename:
+        reasons.append(
+            "Le nom de fichier contient un caractere d'inversion (RLO) qui peut "
+            "masquer visuellement la vraie extension du fichier"
+        )
+
+    parts = filename.rsplit(".", 2)  # jusqu'a 2 extensions (ex: facture.pdf.exe -> ['facture','pdf','exe'])
+    if len(parts) >= 2:
+        last_ext = parts[-1].lower()
+        if last_ext in DANGEROUS_EXTENSIONS:
+            if len(parts) == 3 and parts[-2].lower() in DOCUMENT_LOOKING_EXTENSIONS:
+                reasons.append(
+                    f"Double extension suspecte : le fichier ressemble a un "
+                    f".{parts[-2]} mais est en realite un .{last_ext} executable"
+                )
+            else:
+                reasons.append(
+                    f"Extension de fichier a risque (.{last_ext}) - potentiellement executable"
+                )
+
+    return (len(reasons) > 0), reasons
+
+
+@app.route("/api/analyze-attachment", methods=["POST"])
+@api_key_or_login_required
+def api_analyze_attachment():
+    """Analyse une piece jointe (aujourd'hui : PDF) recue par email.
+
+    Deux niveaux de verification, independants du contenu du message
+    principal :
+      1. Le NOM du fichier lui-meme (double extension, caractere RLO,
+         extension executable deguisee) - s'applique a n'importe quel type
+         de fichier, meme sans l'ouvrir.
+      2. Si le fichier est un vrai PDF lisible : extraction du texte et des
+         liens qu'il contient, puis passage par le meme moteur d'analyse
+         que pour un message classique.
+
+    Attendu : multipart/form-data avec un champ 'file' et un champ
+    optionnel 'filename' (sinon le nom du fichier uploade est utilise)."""
+    if "file" not in request.files:
+        return jsonify({"error": "aucun fichier fourni"}), 400
+
+    uploaded = request.files["file"]
+    filename = request.form.get("filename", uploaded.filename or "piece_jointe")
+
+    filename_suspicious, filename_reasons = check_suspicious_filename(filename)
+
+    file_bytes = uploaded.read()
+    is_pdf = filename.lower().endswith(".pdf") and file_bytes[:4] == b"%PDF"
+
+    # Analyse structurelle du contenu BINAIRE reel, independante du nom de
+    # fichier et du texte visible - c'est elle qui detecte un PDF piege
+    # meme quand le nom de fichier parait parfaitement legitime.
+    structure_label, structure_reasons = ("LEGITIME", [])
+    if file_bytes[:4] == b"%PDF":  # verifie le contenu reel, pas juste l'extension du nom
+        structure_label, structure_reasons = scan_pdf_structure(file_bytes)
+
+    # Detection d'un document Office par SIGNATURE BINAIRE reelle (pas
+    # l'extension du nom) : OLE2 pour les anciens formats .doc/.xls, ZIP
+    # pour les formats modernes .docx/.docm/.xlsx/.xlsm - VBA_Parser gere
+    # les deux automatiquement et ne remonte rien si le fichier n'a pas
+    # de macros (donc aucun risque de faux positif sur un vrai .docx propre).
+    is_ole2 = file_bytes[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    is_zip_signature = file_bytes[:4] == b"PK\x03\x04"
+    is_office_doc = is_ole2 or is_zip_signature
+    macro_label, macro_reasons, has_macros = ("LEGITIME", [], False)
+    if is_office_doc and not is_pdf:
+        macro_label, macro_reasons, has_macros = scan_office_macros(file_bytes)
+
+    # Un fichier ZIP peut aussi etre une simple archive (pas un document
+    # Office) contenant un executable cache, ou etre protege par mot de
+    # passe pour echapper a l'inspection - verifie dans tous les cas ou la
+    # signature ZIP est presente, meme si c'est aussi un document Office
+    # (un vrai .docx propre n'a rien de suspect a l'interieur de son zip).
+    zip_label, zip_reasons = ("LEGITIME", [])
+    if is_zip_signature:
+        zip_label, zip_reasons = scan_zip_archive(file_bytes)
+
+    # Raccourci Windows (.lnk) - signature binaire "L\x00\x00\x00..."
+    is_lnk = file_bytes[:4] == b"L\x00\x00\x00"
+    lnk_label, lnk_reasons = ("LEGITIME", [])
+    if is_lnk:
+        lnk_label, lnk_reasons = scan_lnk_file(file_bytes)
+
+    # 7z - signature binaire "7z\xbc\xaf\x27\x1c"
+    is_7z = file_bytes[:6] == b"7z\xbc\xaf\x27\x1c"
+    sevenz_label, sevenz_reasons = ("LEGITIME", [])
+    if is_7z:
+        sevenz_label, sevenz_reasons = scan_7z_archive(file_bytes)
+
+    # TAR (avec ou sans compression gzip/bzip2) - gzip commence par 1f 8b,
+    # bzip2 par "BZh", un tar non compresse a "ustar" a l'offset 257.
+    is_tar = (
+        file_bytes[:2] == b"\x1f\x8b"
+        or file_bytes[:3] == b"BZh"
+        or (len(file_bytes) > 262 and file_bytes[257:262] == b"ustar")
+    )
+    tar_label, tar_reasons = ("LEGITIME", [])
+    if is_tar:
+        tar_label, tar_reasons = scan_tar_archive(file_bytes)
+
+    # Verification universelle par empreinte VirusTotal - fonctionne pour
+    # N'IMPORTE QUEL type de fichier, y compris RAR (que l'on ne parse pas
+    # nous-meme, faute de binaire unrar disponible sur l'hebergeur actuel)
+    # et les fichiers deliberement malformes pour exploiter une faille du
+    # lecteur (VirusTotal agrege des moteurs a analyse comportementale,
+    # au-dela de ce que des regles statiques locales peuvent detecter).
+    # Volontairement best-effort : n'importe quelle indisponibilite
+    # (cle absente, quota depasse, hash inconnu) degrade proprement sans
+    # jamais faire echouer l'analyse dans son ensemble.
+    vt_result = check_virustotal_file(file_bytes)
+    vt_label = "LEGITIME"
+    vt_reasons = []
+    if vt_result["available"] and vt_result["found"]:
+        if vt_result["malicious"] > 0:
+            vt_label = "PHISHING"
+            vt_reasons.append(f"VirusTotal : {vt_result['message']}")
+        elif vt_result["suspicious"] > 0:
+            vt_label = "SUSPECT"
+            vt_reasons.append(f"VirusTotal : {vt_result['message']}")
+
+    extracted_text = ""
+    links_found = []
+    link_analyses = []
+    pdf_parse_error = None
+
+    if is_pdf:
+        try:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            for page in reader.pages:
+                extracted_text += (page.extract_text() or "") + "\n"
+                annotations = page.get("/Annots")
+                if annotations:
+                    for annot in annotations:
+                        obj = annot.get_object()
+                        uri = obj.get("/A", {}).get("/URI") if obj.get("/A") else None
+                        if uri:
+                            links_found.append(uri)
+            # Filet de securite : recupere aussi les URLs presentes dans le texte brut
+            # (au cas ou elles ne soient pas encodees comme vraies annotations de lien)
+            _, _, text_domains = analyze_urls(extracted_text)
+            for url_match in re.findall(r"https?://[^\s\)\]\"'<>]+", extracted_text):
+                if url_match not in links_found:
+                    links_found.append(url_match)
+        except Exception as e:
+            pdf_parse_error = str(e)
+    elif filename.lower().endswith(".pdf"):
+        # extension .pdf mais signature binaire non conforme -> tres suspect en soi
+        filename_suspicious = True
+        filename_reasons.append(
+            "Le fichier porte l'extension .pdf mais son contenu binaire ne "
+            "correspond pas a un vrai PDF - signe possible de deguisement"
+        )
+
+    # Analyse du texte extrait (comme un message classique)
+    text_analysis = None
+    if extracted_text.strip():
+        text_analysis = analyzer.analyze(extracted_text, channel="pdf-attachment", url_only=False)
+
+    # Analyse individuelle de chaque lien trouve dans le PDF
+    for url in links_found[:15]:  # limite raisonnable
+        link_result = analyzer.analyze(url, channel="pdf-attachment-link", url_only=True)
+        link_analyses.append({
+            "url": url,
+            "label": link_result["label"],
+            "score": link_result["score"],
+            "reasons": link_result["reasons"],
+        })
+
+    # Verdict global : le pire de tous les signaux disponibles - un seul
+    # suffit a alerter.
+    candidate_labels = [
+        structure_label, macro_label, zip_label, lnk_label,
+        sevenz_label, tar_label, vt_label,
+    ]
+    if filename_suspicious:
+        candidate_labels.append("PHISHING")
+    if text_analysis:
+        candidate_labels.append(text_analysis["label"])
+    for la in link_analyses:
+        candidate_labels.append(la["label"])
+
+    label_priority = {"LEGITIME": 0, "SUSPECT": 1, "PHISHING": 2}
+    overall_label = "LEGITIME"
+    for lbl in candidate_labels:
+        if label_priority.get(lbl, 0) > label_priority.get(overall_label, 0):
+            overall_label = lbl
+
+    result = {
+        "filename": filename,
+        "filename_suspicious": filename_suspicious,
+        "filename_reasons": filename_reasons,
+        "is_pdf": is_pdf,
+        "pdf_parse_error": pdf_parse_error,
+        "structure_label": structure_label,
+        "structure_reasons": structure_reasons,
+        "is_office_doc": is_office_doc,
+        "has_macros": has_macros,
+        "macro_label": macro_label,
+        "macro_reasons": macro_reasons,
+        "is_zip": is_zip_signature,
+        "zip_label": zip_label,
+        "zip_reasons": zip_reasons,
+        "is_lnk": is_lnk,
+        "lnk_label": lnk_label,
+        "lnk_reasons": lnk_reasons,
+        "is_7z": is_7z,
+        "sevenz_label": sevenz_label,
+        "sevenz_reasons": sevenz_reasons,
+        "is_tar": is_tar,
+        "tar_label": tar_label,
+        "tar_reasons": tar_reasons,
+        "virustotal": vt_result,
+        "vt_label": vt_label,
+        "vt_reasons": vt_reasons,
+        "extracted_text_excerpt": extracted_text[:500],
+        "text_analysis": text_analysis,
+        "links_found": links_found,
+        "link_analyses": link_analyses,
+        "overall_label": overall_label,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
     return jsonify(result)
 
 
