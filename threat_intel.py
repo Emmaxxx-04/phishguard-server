@@ -218,6 +218,7 @@ def check_virustotal_file(file_bytes: bytes):
 
 
 
+def check_urlscan(url: str):
     """Soumet une URL a URLScan.io pour capture d'ecran + analyse visuelle.
 
     Contrairement a VirusTotal, un scan URLScan prend reellement du temps
